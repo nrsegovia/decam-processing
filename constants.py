@@ -18,3 +18,8 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
               # B1 Field (DDT)
               "B1" : "/data/DECAMNOAO/ShoCd/workspace/b1/", # Note: incomplete processing
               }
+
+# Mode names and definition
+MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old files are removed.",
+         "SAMPLE" : "SAMPLE"}
+MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])

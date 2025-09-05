@@ -208,7 +208,7 @@ __marimo__/
 
 # Directories
 legacy*/
-src/
+extras/
 
 #logs
 logs*
