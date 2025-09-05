@@ -43,9 +43,10 @@ def parse_ccds(value):
             raise argparse.ArgumentTypeError(f"Invalid range: '{value}'. Edges must be within [1-61].")
     else:
         # Single number
+        integer = int(value)
         if in_ccd_range(value):
             try:
-                return int(value), True
+                return integer, True
             except ValueError:
                 raise argparse.ArgumentTypeError(f"Invalid number: '{value}'. Expected a single number or range (e.g., '1-10')")
         else:
@@ -129,7 +130,7 @@ def main():
     parser.add_argument(
         '--bands', 
         type=str, 
-        default="g,r,i,z",
+        default="griz",
         help='Bands to work with, comma separated without spaced. The default is "g,r,i,z", all available bands.'
     )
     
@@ -143,6 +144,7 @@ def main():
     parser.add_argument(
         '--mode', 
         type=parse_mode,
+        required=True,
         help=f'Mode to use. Can be one of the following: \n{MODES_STRING}'
     )
     
