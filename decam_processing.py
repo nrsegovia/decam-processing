@@ -122,6 +122,12 @@ def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, wo
                 for msg in messages:
                     if msg != "":
                         logger.error(msg)
+            
+            # Update the Header.info file
+            try:
+                replace_string_in_file(Path(target_dir, "Header.info"), ".hdf", ".parquet")
+            except Exception:
+                logger.error(f"Header.info file in {target_dir} failed to convert. Check the directory.")
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
 
