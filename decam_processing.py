@@ -7,6 +7,7 @@ from constants import *
 from pathlib import Path
 import argparse
 import re
+import os
 
 '''
 Main script. Call other functions and constants from here
@@ -88,7 +89,7 @@ def parse_mode(value):
 
 # MODE INITIALIZATION FUNCTIONS
 
-def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, logger):
+def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, workers, logger):
     
     logger.info(f"Converting HDF files to Parquet...")
     directories = []
@@ -114,7 +115,7 @@ def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, lo
     # Call the relevant function for all necessary directories:
     for target_dir in directories:
         if target_dir.exists():
-            success, fail, errors = HDF5_directory_to_parquet(target_dir, logger, 4)
+            success, fail, errors = HDF5_directory_to_parquet(target_dir, logger, workers)
             logger.info(f"Finished {target_dir} with {success} succesfully verified, {fail} non-verified, and {errors} error file(s).")
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
@@ -142,6 +143,13 @@ def main():
     )
     
     parser.add_argument(
+        '--workers', 
+        type=int, 
+        default=min(32, (os.cpu_count() or 1) + 4),
+        help='Number of workers to use when multithreading is involved. Defaults to min(32, (os.cpu_count() or 1) + 4)'
+    )
+
+    parser.add_argument(
         '--ccds', 
         type=parse_ccds,
         required=True,
@@ -168,6 +176,7 @@ def main():
     bands, single_band = args.bands
     main_dir = ALL_FIELDS[args.directory]
     mode = args.mode
+    workers = args.workers
 
     # Initialize logging
     logging.basicConfig(filename=Path(local, "processing.log"),
@@ -177,7 +186,7 @@ def main():
     logger = logging.getLogger(__name__)
 
     if mode == "HDF_TO_PARQUET":
-        hdf_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, logger)
+        hdf_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
 
 if __name__ == "__main__":
     main()
