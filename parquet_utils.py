@@ -50,7 +50,7 @@ def HDF5_directory_to_parquet(directory_path: Path, logger: logging.Logger, work
         successes.append(results[0])
         messages.append(results[1])
     
-    results = np.array(results)
+    results = np.array(successes)
     success = sum(results > 0)
     fail = sum(results == 0)
     errors = sum(results < 0)
