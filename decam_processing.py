@@ -43,14 +43,17 @@ def parse_ccds(value):
             raise argparse.ArgumentTypeError(f"Invalid range: '{value}'. Edges must be within [1-61].")
     else:
         # Single number
-        integer = int(value)
-        if in_ccd_range(value):
+        try:
+            integer = int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"Invalid input: '{value}'. Expected numeric.")
+        if in_ccd_range(integer):
             try:
                 return integer, True
             except ValueError:
-                raise argparse.ArgumentTypeError(f"Invalid number: '{value}'. Expected a single number or range (e.g., '1-10')")
+                raise argparse.ArgumentTypeError(f"Invalid number: '{integer}'. Expected a single number or range (e.g., '1-10')")
         else:
-            raise argparse.ArgumentTypeError(f"Invalid number: '{value}'. Number must be within [1-61].")
+            raise argparse.ArgumentTypeError(f"Invalid number: '{integer}'. Number must be within [1-61].")
 
 def parse_bands(value):
     """
@@ -60,7 +63,7 @@ def parse_bands(value):
     is_list = len(value) > 1
     if is_list:
         check_list = any([x not in valid_bands for x in value])
-        if not check_list:
+        if check_list:
             raise argparse.ArgumentTypeError(f"Invalid band list format: '{value}'. Expected a string made of the following characters: {valid_bands}, e.g., 'gri', 'iz', 'g'.")
         return value, False
     else:
@@ -89,28 +92,32 @@ def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, lo
     
     logger.info(f"Converting HDF files to Parquet...")
     directories = []
+    str_ccds = str(ccds) if single_ccd else [str(x) for x in ccds]
 
     # Single CCD and single band
     if single_ccd and single_band:
-        directories.append(Path(main_dir, ccds, bands))
+        directories.append(Path(main_dir, str_ccds, bands))
     # Single CCD and multiple bands
     elif single_ccd:
         for band in bands:
-            directories.append(Path(main_dir, ccds, band))
+            directories.append(Path(main_dir, str_ccds, band))
     # Single band and multiple CCDs
     elif single_band:
-        for ccd in ccds:
+        for ccd in str_ccds:
             directories.append(Path(main_dir, ccd, bands))
     # Multiple CCDs and multiple bands
     else:
-        for ccd in ccds:
+        for ccd in str_ccds:
             for band in bands:
                 directories.append(Path(main_dir, ccd, band))
 
     # Call the relevant function for all necessary directories:
     for target_dir in directories:
-        success, fail, errors = HDF5_directory_to_parquet(target_dir, logger, 4)
-        logger.info(f"Finished {target_dir} with {success} succesfully verified, {fail} non-verified, and {errors} error file(s).")
+        if target_dir.exists():
+            success, fail, errors = HDF5_directory_to_parquet(target_dir, logger, 4)
+            logger.info(f"Finished {target_dir} with {success} succesfully verified, {fail} non-verified, and {errors} error file(s).")
+        else:
+            logger.info(f"{target_dir} does not exist. Skipping.")
 
 def main():
     # Create argument parser
@@ -129,9 +136,9 @@ def main():
     
     parser.add_argument(
         '--bands', 
-        type=str, 
+        type=parse_bands, 
         default="griz",
-        help='Bands to work with, comma separated without spaced. The default is "g,r,i,z", all available bands.'
+        help='Bands to work with (together in a string). The default is "griz", all available bands.'
     )
     
     parser.add_argument(
