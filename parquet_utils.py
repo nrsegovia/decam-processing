@@ -9,9 +9,10 @@ import numpy as np
 Functionality related to converting from fits to parquet file format.
 """
 
-def HDF5_file_to_parquet(hdf_file: Path, parquet_file: Path) -> int:
+def HDF5_file_to_parquet(hdf_file: Path, parquet_file: Path) -> Tuple[int, str]:
     """Converts single HDF file to parquet format"""
     status_success = 0
+    message = ""
     try:
         df = pd.read_hdf(hdf_file)
         df.to_parquet(parquet_file, index=False)
@@ -21,10 +22,11 @@ def HDF5_file_to_parquet(hdf_file: Path, parquet_file: Path) -> int:
         if df.equals(df_parquet):
             hdf_file.unlink()  # Delete HDF5 file
             status_success = 1
-    except Exception:
+    except Exception as e:
         status_success = -1
+        message = str(e)
     
-    return status_success
+    return status_success, message
 
 def HDF5_directory_to_parquet(directory_path: Path, logger: logging.Logger, workers: int = 1) -> Tuple:
     """Convert HDF5 files in a given directory to Parquet format.
@@ -40,9 +42,17 @@ def HDF5_directory_to_parquet(directory_path: Path, logger: logging.Logger, work
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(HDF5_file_to_parquet, hdf, pq) for hdf, pq in file_pairs]
 
-    results = np.array([future.result() for future in futures])
+    successes = []
+    messages = []
+
+    for future in futures:
+        results = future.result()
+        successes.append(results[0])
+        messages.append(results[1])
+    
+    results = np.array(results)
     success = sum(results > 0)
     fail = sum(results == 0)
     errors = sum(results < 0)
 
-    return success, fail, errors
+    return success, fail, errors, messages

@@ -115,8 +115,13 @@ def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, wo
     # Call the relevant function for all necessary directories:
     for target_dir in directories:
         if target_dir.exists():
-            success, fail, errors = HDF5_directory_to_parquet(target_dir, logger, workers)
+            success, fail, errors, messages = HDF5_directory_to_parquet(target_dir, logger, workers)
             logger.info(f"Finished {target_dir} with {success} succesfully verified, {fail} non-verified, and {errors} error file(s).")
+            if errors > 0:
+                logger.info(f"Listing errors below.")
+                for msg in messages:
+                    if msg != "":
+                        logger.error(msg)
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
 
