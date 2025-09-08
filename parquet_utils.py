@@ -4,6 +4,7 @@ import pandas as pd
 import logging
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
+import gc
 
 """
 Functionality related to converting from fits to parquet file format.
@@ -22,6 +23,10 @@ def HDF5_file_to_parquet(hdf_file: Path, parquet_file: Path) -> Tuple[int, str]:
         if df.equals(df_parquet):
             hdf_file.unlink()  # Delete HDF5 file
             status_success = 1
+        del df
+        del df_parquet
+        gc.collect()
+        
     except Exception as e:
         status_success = -1
         message = str(e)
