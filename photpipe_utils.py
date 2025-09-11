@@ -77,7 +77,15 @@ def photpipe_to_parquet(path, ccd, band, counter, columns = ['RA', 'Dec', 'M', '
     hdul.close()
 
     # Load data as pandas data frame (convenience)
-    initial = Table.read(path, format = 'ascii.no_header', data_start = 1, names = ['Xpos','Ypos','M','dM','flux','dflux','type','peakflux','sigx','sigxy','sigy','sky','chisqr','class','FWHM1','FWHM2','FWHM','angle','extendedness','flag','mask','Nmask','RA','Dec'])
+    initial = Table.read(path, format = 'ascii.no_header',
+                         data_start = 1,
+                         names = ['Xpos','Ypos','M','dM','flux',
+                                  'dflux','type','peakflux','sigx',
+                                  'sigxy','sigy','sky','chisqr',
+                                  'class','FWHM1','FWHM2','FWHM',
+                                  'angle','extendedness','flag',
+                                  'mask','Nmask','RA','Dec'])
+    
     initial.remove_columns(['RA', 'Dec'])
     df = initial.to_pandas()
 
