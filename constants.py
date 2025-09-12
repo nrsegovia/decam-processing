@@ -19,7 +19,7 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
               "B1" : "/data/DECAMNOAO/ShoCd/workspace/b1/", # Note: incomplete processing
               }
 
-# STILTS or TOPCAT path. Must be the parquet-compatible version, usually topcat-full.jar
+# STILTS or TOPCAT path. Must be the parquet-compatible version, usually topcat-extra.jar
 
 STILTS = "/data/DECAMNOAO/ShoCd/code/src/topcat-extra.jar"
 

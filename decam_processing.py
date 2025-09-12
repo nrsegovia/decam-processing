@@ -141,7 +141,8 @@ def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, wo
     else:
         these_ccds = ccds
     # Process each subdirectory
-    for current_ccd in these_ccds:
+    for number_ccd in these_ccds:
+        current_ccd = str(number_ccd)
         for band in bands:
             subdir = Path(main_dir, current_ccd, band)
             if subdir.is_dir():
