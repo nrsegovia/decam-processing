@@ -340,11 +340,10 @@ def match_list_of_files(logger, paths):
         available_columns = [col for col in final_columns if col in current_result.columns]
         current_result = current_result[available_columns]
         
-        return current_result
-        
     finally:
         try:
             Path(current_temp_file).unlink()
+            return current_result
         except:
             pass
 
@@ -353,9 +352,8 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, band):
     directory_path = Path(field_path, ccd, band)
     to_match = [x for x in directory_path.glob("*.parquet")]
     logger.info(f"Found {len(to_match)} files to process.")
-    match_list_of_files(logger, to_match)
-
-
+    out_df = match_list_of_files(logger, to_match)
+    return out_df
 
 def create_ccd_master_catalog(logger, field_path, ccd, bands = "griz"):
     for band in bands:
