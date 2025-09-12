@@ -59,7 +59,7 @@ def parse_ccds(value):
 
 def parse_bands(value):
     """
-    Parse a single or multiple bands. Returns either a string.
+    Parse a single or multiple bands. Returns string.
     """
     # Check if it's a list based on length
     is_list = len(value) > 1
@@ -71,7 +71,7 @@ def parse_bands(value):
     else:
         # Single band
         if value in valid_bands:
-            return int(value), True
+            return value, True
         else:
             raise argparse.ArgumentTypeError(f"Invalid band: '{value}'. Expected one of {valid_bands}.")
 
