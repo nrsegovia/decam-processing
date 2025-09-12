@@ -6,14 +6,18 @@ import re
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.table import Table
+from astropy.io.fits.verify import VerifyWarning
 import logging
+import warnings
 
 """
 Functionality related to processing photpipe output into parquet catalogues
 """
 
-def process_photpipe_dir(directory_path: Path, ccd: int, bands: str, logger: logging.Logger, workers: int):
-    
+def process_photpipe_dir(directory_path: Path, ccd: int, bands: str, logger: logging.Logger, workers: int, show_warnings: bool = False):
+    if not show_warnings:
+        warnings.simplefilter('ignore', category=VerifyWarning)#hide fits warnings due to differences in size
+        warnings.simplefilter('ignore', category=UserWarning)
     path_dictionary = {band : [] for band in bands}
     directory_path = Path(directory_path)
     dcmp_files = [x for x in directory_path.glob("*.dcmp")]
@@ -52,7 +56,7 @@ def process_photpipe_dir(directory_path: Path, ccd: int, bands: str, logger: log
             successes.append(results[1])
             messages.append(results[2])
         # Create csv file to store the information collected form headers
-        with open(Path(output_directory, 'Header.info')) as info_file:
+        with open(Path(output_directory, 'Header.info'), "w") as info_file:
             info_file.writelines(info_entries)
 
     successes = np.array(successes)
