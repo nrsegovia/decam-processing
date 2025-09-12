@@ -9,6 +9,7 @@ from pathlib import Path
 import argparse
 import re
 import os
+from matcher import *
 
 '''
 Main script. Call other functions and constants from here
@@ -93,7 +94,7 @@ def parse_mode(value):
 def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, workers, logger):
     
     logger.info(f"Converting HDF files to Parquet...")
-    directories = directories = list_directories(main_dir, ccds, single_ccd, bands, single_band)
+    directories = list_directories(main_dir, ccds, single_ccd, bands, single_band)
 
     # Call the relevant function for all necessary directories:
     for target_dir in directories:
@@ -132,6 +133,34 @@ def dcmp_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, w
                         logger.error(msg)
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
+
+def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
+    """Run batch processing on given field-ccd-band(s) configuration."""
+    if single_ccd:
+        these_ccds = [ccds]
+    else:
+        these_ccds = ccds
+    # Process each subdirectory
+    for current_ccd in these_ccds:
+        for band in bands:
+            subdir = Path(main_dir, current_ccd, band)
+            if subdir.is_dir():
+                try:
+                    logger.info(f"Processing directory: {subdir.name}")
+                    result_df = create_ccd_band_master_catalog(logger, main_dir, current_ccd, band)
+                    if result_df is not None and len(result_df) > 0:
+                        # Save results
+                        output_file = Path(main_dir, current_ccd, f"{current_ccd}.{band}.catalogue.parquet")
+                        result_df.to_parquet(output_file, index = False)
+                        logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
+                    else:
+                        logger.warning(f"No results generated for {subdir.name}")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to process directory {subdir.name}: {e}")
+                    continue
+
+    logger.info("Batch processing completed!")
 
 def main():
     # Create argument parser
@@ -202,6 +231,8 @@ def main():
         hdf_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
     elif mode == "DCMP_TO_PARQUET":
         dcmp_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+    elif mode == "CATALOG_PER_CCD_BAND":
+        catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
 
 if __name__ == "__main__":
     main()

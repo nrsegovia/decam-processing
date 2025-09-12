@@ -350,7 +350,7 @@ def match_list_of_files(logger, paths):
         except:
             pass
 
-def create_ccd_band_master_catalog(logger, field_path, ccd, band, radius = 1.0):
+def create_ccd_band_master_catalog(logger, field_path, ccd, band):
     logger.info(f"Working on CCD {ccd}, {band}-band.")
     directory_path = Path(field_path, ccd, band)
     to_match = [x for x in directory_path.glob("*.parquet")]
@@ -359,7 +359,7 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, band, radius = 1.0):
 
 
 
-def create_ccd_master_catalog(logger, field_path, ccd, bands = "griz", radius = 1.0):
+def create_ccd_master_catalog(logger, field_path, ccd, bands = "griz"):
     for band in bands:
-        create_ccd_band_master_catalog(logger, field_path, ccd, band, radius)
+        create_ccd_band_master_catalog(logger, field_path, ccd, band)
     # Once done, load created catalogs per band and match them.
