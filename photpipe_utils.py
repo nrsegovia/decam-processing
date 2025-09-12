@@ -1,10 +1,7 @@
-from typing import Tuple
 from pathlib import Path
-import pandas as pd
 import logging
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-import gc
 import re
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -15,7 +12,7 @@ import logging
 Functionality related to processing photpipe output into parquet catalogues
 """
 
-def process_photpipe_dir(directory_path: Path, ccd: int, bands: list, logger: logging.Logger, workers: int):
+def process_photpipe_dir(directory_path: Path, ccd: int, bands: str, logger: logging.Logger, workers: int):
     
     path_dictionary = {band : [] for band in bands}
     directory_path = Path(directory_path)
@@ -28,77 +25,96 @@ def process_photpipe_dir(directory_path: Path, ccd: int, bands: list, logger: lo
             path_dictionary[current_band].append(dcmp_file)
         else:
             logger.error(f"{dcmp_file} does not match the expected format. Skipping.")
-    
+    # Header.info header
+    info_header = "Original,File,"
+    info_columns = ["MJD-OBS", "ZPTMAG", "M10SIGMA"]
+    for x in info_columns:
+        info_header += f"{x},"
+    info_header = info_header[:-1] + "\n"
+    successes = []
+    messages = []
+    total_dcmp = 0
     for selected_band in path_dictionary.keys():
         output_directory = Path(directory_path, selected_band)
         output_directory.mkdir(parents=True, exist_ok=True)
+        these_dcmp = path_dictionary[selected_band]
+        total_dcmp += len(these_dcmp)
         with ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(photpipe_to_parquet, dcmp, ccd, selected_band, index) for index, dcmp in enumerate(path_dictionary[selected_band], start = 1)]
+            futures = [executor.submit(photpipe_to_parquet, dcmp, ccd, selected_band, index, infoColumns = info_columns) for index, dcmp in enumerate(these_dcmp, start = 1)]
 
-        info_entries = []
+        info_entries = [info_header]
 
         for future in futures:
             results = future.result()
-            info_entries.append(results)
-        
-    # The following is a reminder: must create the Header.info file, but using the list of rows.
-    # Create dataframe to store the information collected form headers
-    df2 = pd.DataFrame()
-    df2['Original'] = infoKeeping[0]
-    df2['File'] = infoKeeping[1]
-    for x in range(extraInfoCols):
-        df2[infoColumnsToKeep[x]] = infoKeeping[2 + x]
-    df2.to_csv(os.path.join(finalPath, 'Header.info'), index = False)
-    print(f'CCD {ccd} files successfully converted into HDF files.')
+            info_row = results[0]
+            if info_row != "":
+                info_entries.append(info_row)
+            successes.append(results[1])
+            messages.append(results[2])
+        # Create csv file to store the information collected form headers
+        with open(Path(output_directory, 'Header.info')) as info_file:
+            info_file.writelines(info_entries)
 
-        return success, fail, errors, messages
+    successes = np.array(successes)
+    ok = sum(successes > 0)
+    fail = sum(successes < 0)
+
+    return ok, fail, total_dcmp, messages
             
 
 
 def photpipe_to_parquet(path, ccd, band, counter, columns = ['RA', 'Dec', 'M', 'dM', 'flux', 'dflux','type'], infoColumns = ["MJD-OBS", "ZPTMAG", "M10SIGMA"]):
 
+    status_success = -1
+    message = ""
     extraInfoCols = len(infoColumns)
     simplifiedName = f'{ccd}.{band}.{counter}.parquet'
     infoKeeping = f"{path},{simplifiedName},{counter},"
-    # Read header to acquire important information
-    hdul = fits.open(path) 
-    hdr = hdul[0].header
+    try:
+        # Read header to acquire important information
+        hdul = fits.open(path) 
+        hdr = hdul[0].header
 
-    for x in range(extraInfoCols):
-        content = hdr.get(infoColumns[x])
-        if content: 
-            #Armin Rest pointed out that in some cases computation fails and therefore some elements are not listed. So we avoid that error by checking beforehand
-            infoKeeping += f"{content}," # hdr[infoColumns[x]]
-        else:
-            # As 'missing value' flag
-            infoKeeping += f"{-99},"
-    
-    w = WCS(hdr)
-    hdul.close()
+        for x in range(extraInfoCols):
+            content = hdr.get(infoColumns[x])
+            if content: 
+                #Armin Rest pointed out that in some cases computation fails and therefore some elements are not listed. So we avoid that error by checking beforehand
+                infoKeeping += f"{content}," # hdr[infoColumns[x]]
+            else:
+                # As 'missing value' flag
+                infoKeeping += f"{-99},"
+        
+        w = WCS(hdr)
+        hdul.close()
 
-    # Load data as pandas data frame (convenience)
-    initial = Table.read(path, format = 'ascii.no_header',
-                         data_start = 1,
-                         names = ['Xpos','Ypos','M','dM','flux',
-                                  'dflux','type','peakflux','sigx',
-                                  'sigxy','sigy','sky','chisqr',
-                                  'class','FWHM1','FWHM2','FWHM',
-                                  'angle','extendedness','flag',
-                                  'mask','Nmask','RA','Dec'])
-    
-    initial.remove_columns(['RA', 'Dec'])
-    df = initial.to_pandas()
+        # Load data as pandas data frame (convenience)
+        initial = Table.read(path, format = 'ascii.no_header',
+                            data_start = 1,
+                            names = ['Xpos','Ypos','M','dM','flux',
+                                    'dflux','type','peakflux','sigx',
+                                    'sigxy','sigy','sky','chisqr',
+                                    'class','FWHM1','FWHM2','FWHM',
+                                    'angle','extendedness','flag',
+                                    'mask','Nmask','RA','Dec'])
+        
+        initial.remove_columns(['RA', 'Dec'])
+        df = initial.to_pandas()
 
-    # Compute coordinates, as they are not computed by photpipe
-    coords2 = np.c_[df['Xpos'].values,df['Ypos'].values]
-    sky = w.all_pix2world(coords2,1)
-    df['RA'] = sky[:,0]
-    df['Dec'] = sky[:,1]
+        # Compute coordinates, as they are not computed by photpipe
+        coords2 = np.c_[df['Xpos'].values,df['Ypos'].values]
+        sky = w.all_pix2world(coords2,1)
+        df['RA'] = sky[:,0]
+        df['Dec'] = sky[:,1]
 
-    # Reorder columns and keep only specified ones
-    df = df[columns] 
+        # Reorder columns and keep only specified ones
+        df = df[columns] 
 
-    # Save file
-    df.to_parquet(Path(path.stem, band, simplifiedName), index = False)
-    
-    return infoKeeping[:-1]
+        # Save file
+        df.to_parquet(Path(path.stem, band, simplifiedName), index = False)
+        out_info_row = infoKeeping[:-1] + "\n"
+        status_success = 1
+    except Exception as e:
+        message = str(e)
+        out_info_row = ""
+
+    return out_info_row, status_success, message

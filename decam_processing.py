@@ -2,6 +2,7 @@
 
 import logging
 from parquet_utils import *
+from photpipe_utils import *
 from utils import *
 from constants import *
 from pathlib import Path
@@ -92,25 +93,7 @@ def parse_mode(value):
 def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, workers, logger):
     
     logger.info(f"Converting HDF files to Parquet...")
-    directories = []
-    str_ccds = str(ccds) if single_ccd else [str(x) for x in ccds]
-
-    # Single CCD and single band
-    if single_ccd and single_band:
-        directories.append(Path(main_dir, str_ccds, bands))
-    # Single CCD and multiple bands
-    elif single_ccd:
-        for band in bands:
-            directories.append(Path(main_dir, str_ccds, band))
-    # Single band and multiple CCDs
-    elif single_band:
-        for ccd in str_ccds:
-            directories.append(Path(main_dir, ccd, bands))
-    # Multiple CCDs and multiple bands
-    else:
-        for ccd in str_ccds:
-            for band in bands:
-                directories.append(Path(main_dir, ccd, band))
+    directories = directories = list_directories(main_dir, ccds, single_ccd, bands, single_band)
 
     # Call the relevant function for all necessary directories:
     for target_dir in directories:
@@ -128,6 +111,25 @@ def hdf_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, wo
                 replace_string_in_file(Path(target_dir, "Header.info"), ".hdf", ".parquet")
             except Exception:
                 logger.error(f"Header.info file in {target_dir} failed to convert. Check the directory.")
+        else:
+            logger.info(f"{target_dir} does not exist. Skipping.")
+
+
+def dcmp_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, workers, logger):
+    
+    logger.info(f"Converting dcmp files (photpipe catalogs) to Parquet...")
+    directories, str_ccd = list_directories_no_band(main_dir, ccds, single_ccd)
+
+    # Call the relevant function for all necessary directories:
+    for index, target_dir in enumerate(directories):
+        if target_dir.exists():
+            ok, fail, total, messages = process_photpipe_dir(target_dir, str_ccd[index], bands, logger, workers)
+            logger.info(f'CCD {str_ccd[index]} had {total} dcmp files.\n{ok} succeeded, {fail} failed. If any failed, find details below.')
+            if fail > 0:
+                logger.info(f"Listing errors below.")
+                for msg in messages:
+                    if msg != "":
+                        logger.error(msg)
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
 
@@ -185,7 +187,7 @@ def main():
     args = parser.parse_args()
     ccds, single_ccd = args.ccds
     bands, single_band = args.bands
-    main_dir = ALL_FIELDS[args.directory]
+    main_dir = Path(ALL_FIELDS[args.directory])
     mode = args.mode
     workers = args.workers
 
@@ -198,6 +200,8 @@ def main():
 
     if mode == "HDF_TO_PARQUET":
         hdf_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+    elif mode == "DCMP_TO_PARQUET":
+        dcmp_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
 
 if __name__ == "__main__":
     main()

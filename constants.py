@@ -21,5 +21,5 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
 
 # Mode names and definition
 MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old files are removed.",
-         "SAMPLE" : "SAMPLE"}
+         "DCMP_TO_PARQUET" : "Convert dcmp files in a directory created by photpipe to parquet. New subdirectories per each requested band are created."}
 MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])
