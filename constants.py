@@ -19,7 +19,26 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
               "B1" : "/data/DECAMNOAO/ShoCd/workspace/b1/", # Note: incomplete processing
               }
 
+# STILTS or TOPCAT path. Must be the parquet-compatible version, usually topcat-full.jar
+
+STILTS = "/data/DECAMNOAO/ShoCd/"
+
 # Mode names and definition
 MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old files are removed.",
-         "DCMP_TO_PARQUET" : "Convert dcmp files in a directory created by photpipe to parquet. New subdirectories per each requested band are created."}
+         "DCMP_TO_PARQUET" : "Convert dcmp files in a directory created by photpipe to parquet. New subdirectories per each requested band are created.",
+         "CATALOG_PER_CCD_BAND" : "Creates catalog of all sources observed at least once as type 1 or 3 in a given configuration of field-ccd-band(s). Uses STILTS, so the number of workers set here is irrelevant."}
 MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])
+
+# Crossmtach (lightcurve) creation configuration.
+CROSSMATCH = {"radius"    : 1.0,
+              "col1_ra"   : "RA",
+              "col1_dec"  : "Dec",
+              "col2_ra"   : "RA",
+              "col2_dec"  : "Dec",
+              "join_type" : "1or2"}
+
+PROCESSING = {"input_columns"      : ["RA", "Dec", "M", "dM", "flux", "dflux", "type"],
+              "columns_to_average" : ["RA", "Dec", "M"],
+              "error_columns"      : ["dM"],
+              "columns_to_drop"    : ["flux", "dflux"],
+              "type_column"        : "type"} 
