@@ -116,7 +116,7 @@ def photpipe_to_parquet(path, ccd, band, counter, columns = ['RA', 'Dec', 'M', '
         df = df[columns] 
 
         # Save file
-        df.to_parquet(Path(path.stem, band, simplifiedName), index = False)
+        df.to_parquet(Path(path.resolve().parent, band, simplifiedName), index = False)
         out_info_row = infoKeeping[:-1] + "\n"
         status_success = 1
     except Exception as e:
