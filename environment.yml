@@ -1,0 +1,15 @@
+# To be installed with conda: conda env create -f environment.yml
+name: decam
+channels:
+  - conda-forge # Optional: include other channels like conda-forge for more packages
+  - defaults
+dependencies:
+  - python>=3.10
+  - numpy
+  - pandas
+  - pytables
+  - astropy
+  - pyarrow-core
+  - libparquet
+#  - pip: # Packages to be installed via pip
+#    - 
