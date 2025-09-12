@@ -8,7 +8,7 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
               "EAST_SHOCD" : "/data/DECAMNOAO/ShoCd/workspace/decaps_east_shocd/",
               "EAST_ONE" : "/data/DECAMNOAO/ShoCd/workspace/decaps_east_regular/",
               "EAST_TWO" : "/data/DECAMNOAO/ShoCd/workspace/decaps_east_regular2/",
-              "EAST_072824" : "/data/DECAMNOAO/ShoCd/workspace/decaps_east_072824/", #DDMMYY
+              "EAST_240728" : "/data/DECAMNOAO/ShoCd/workspace/decaps_east_240728/", #YYDDMM
               # DECaPS West Field(DDT)
               "WEST_ONE" : "/data/DECAMNOAO/ShoCd/workspace/decaps_west1/",
               "WEST_TWO" : "/data/DECAMNOAO/ShoCd/workspace/decaps_west/",
