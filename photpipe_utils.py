@@ -26,7 +26,9 @@ def process_photpipe_dir(directory_path: Path, ccd: int, bands: str, logger: log
         check_band = re.search(r"/*[.][griz][.]", str(dcmp_file), flags=0)
         if check_band:
             current_band = check_band.group(0)[1] # This retrieves the matched pattern and selects the relevant band
-            path_dictionary[current_band].append(dcmp_file)
+            # Only process specified bands
+            if current_band in bands:
+                path_dictionary[current_band].append(dcmp_file)
         else:
             logger.error(f"{dcmp_file} does not match the expected format. Skipping.")
     # Header.info header
