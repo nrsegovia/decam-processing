@@ -21,7 +21,7 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
 
 # STILTS or TOPCAT path. Must be the parquet-compatible version, usually topcat-full.jar
 
-STILTS = "/data/DECAMNOAO/ShoCd/"
+STILTS = "/data/DECAMNOAO/ShoCd/code/src/topcat-extra.jar"
 
 # Mode names and definition
 MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old files are removed.",
