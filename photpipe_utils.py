@@ -19,7 +19,7 @@ def process_photpipe_dir(directory_path: Path, ccd: int, bands: str, logger: log
     dcmp_files = [x for x in directory_path.glob("*.dcmp")]
     # Separate by band
     for dcmp_file in dcmp_files:
-        check_band = re.search(r"/*[.][griz][.]", dcmp_file, flags=0)
+        check_band = re.search(r"/*[.][griz][.]", str(dcmp_file), flags=0)
         if check_band:
             current_band = check_band.group(0)[1] # This retrieves the matched pattern and selects the relevant band
             path_dictionary[current_band].append(dcmp_file)
