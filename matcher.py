@@ -5,8 +5,10 @@ from constants import *
 import subprocess
 import pandas as pd
 import numpy as np
+from utils import *
+import concurrent.futures
 
-# Call topcat/stilts, no multiprocessing involved as I do not know how stilts handles matching.
+# Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
 def compute_n_cols(type_col: pd.Series):
 
@@ -20,7 +22,7 @@ def compute_n_cols(type_col: pd.Series):
 
     return [n1, n3, nplus]
 
-def post_process_first_crossmatch(logger, df: pd.DataFrame) -> pd.DataFrame:
+def post_process_first_crossmatch(logger, df: pd.DataFrame, zpt_one, zpt_two) -> pd.DataFrame:
     """Post-process the first crossmatch between two catalogs."""
     logger.info("Post-processing first crossmatch...")
     
@@ -31,8 +33,11 @@ def post_process_first_crossmatch(logger, df: pd.DataFrame) -> pd.DataFrame:
     result_data = {}
     
     # Process type counts based on type_1 and type_2 columns
-    logger.debug("Computing initial type counts...")
+    logger.debug("Computing initial type counts and adding zeropoints...")
     
+    df["M_1"] = df["M_1"] + zpt_one
+    df["M_2"] = df["M_2"] + zpt_two
+
     type_col_1 = f"{type_col}_1"
     type_col_2 = f"{type_col}_2"
 
@@ -99,7 +104,7 @@ def post_process_first_crossmatch(logger, df: pd.DataFrame) -> pd.DataFrame:
     
     return result_df
 
-def post_process_subsequent_crossmatch(logger, df: pd.DataFrame) -> pd.DataFrame:
+def post_process_subsequent_crossmatch(logger, df: pd.DataFrame, new_zpt) -> pd.DataFrame:
     """Post-process subsequent crossmatches with accumulated results."""
     logger.info("Post-processing subsequent crossmatch...")
     
@@ -110,8 +115,9 @@ def post_process_subsequent_crossmatch(logger, df: pd.DataFrame) -> pd.DataFrame
     result_data = {}
     
     # Process type counts - add new contributions to existing counts
-    logger.debug("Updating type counts...")
-    
+    logger.debug("Updating type counts and including zeropoint...")
+    # Special case: magnitudes from "new" catalogue need zeropoint
+    df["M_2"] = df["M_2"] + new_zpt
     # Get existing counts from catalog 1 (accumulated results)
     existing_n1 = df.get('n1', pd.Series(0, index=df.index)).fillna(0).astype(int)
     existing_n3 = df.get('n3', pd.Series(0, index=df.index)).fillna(0).astype(int)
@@ -311,9 +317,11 @@ def match_list_of_files(logger, paths):
                 
                 # Crossmatch the two files directly
                 crossmatch_df = stilts_crossmatch_pair(logger, file_path_1, file_path_2)
-                
+                # Get required zeropoints
+                zpt_one = get_from_header(file_path_1, "ZPTMAG")
+                zpt_two = get_from_header(file_path_2, "ZPTMAG")
                 # Post-process for first crossmatch
-                current_result = post_process_first_crossmatch(logger, crossmatch_df)
+                current_result = post_process_first_crossmatch(logger, crossmatch_df, zpt_one, zpt_two)
                 
                 first_crossmatch = False
                 logger.info(f"First crossmatch completed: {len(current_result)} rows")
@@ -329,9 +337,10 @@ def match_list_of_files(logger, paths):
                 
                 # Crossmatch current result with next file
                 crossmatch_df = stilts_crossmatch_pair(logger, Path(current_temp_file), file_path)
-                
+                new_zpt = get_from_header(file_path, "ZPTMAG")
+
                 # Post-process subsequent crossmatch
-                current_result = post_process_subsequent_crossmatch(logger, crossmatch_df)
+                current_result = post_process_subsequent_crossmatch(logger, crossmatch_df, new_zpt)
                 
                 logger.info(f"Crossmatch {i} completed: {len(current_result)} rows.")
         
@@ -348,14 +357,28 @@ def match_list_of_files(logger, paths):
             pass
 
 def create_ccd_band_master_catalog(logger, field_path, ccd, band):
-    logger.info(f"Working on CCD {ccd}, {band}-band.")
-    directory_path = Path(field_path, ccd, band)
-    to_match = [x for x in directory_path.glob("*.parquet")]
-    logger.info(f"Found {len(to_match)} files to process.")
-    out_df = match_list_of_files(logger, to_match)
-    return out_df
+    subdir = Path(field_path, ccd, band)
+    if subdir.is_dir():
+        try:
+            directory_path = Path(field_path, ccd, band)
+            to_match = [x for x in directory_path.glob("*.parquet")]
+            logger.info(f"Found {len(to_match)} files to process.")
+            result_df = match_list_of_files(logger, to_match)
+            if result_df is not None and len(result_df) > 0:
+                # Save results
+                output_file = Path(field_path, ccd, f"{ccd}.{band}.catalogue.parquet")
+                result_df.to_parquet(output_file, index = False)
+                logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
+            else:
+                logger.warning(f"No results generated for {subdir.name}")
+                
+        except Exception as e:
+            logger.error(f"Failed to process directory {subdir.name}: {e}")
+    return band
+
 
 def create_ccd_master_catalog(logger, field_path, ccd, bands = "griz"):
+
     for band in bands:
         create_ccd_band_master_catalog(logger, field_path, ccd, band)
     # Once done, load created catalogs per band and match them.
