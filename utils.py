@@ -52,11 +52,7 @@ def list_directories_no_band(main_dir, ccds, single_ccd):
 
 def get_from_header(file_path: Path, column: str):
     header = pd.read_csv(Path(file_path.parent, "Header.info"))
-    print(header.File.values)
-    print(file_path.name)
     row = header.File[header.File.values == file_path.name].index.to_list()[0]
-
-    print(row)
     try:
         value = header.at[row, column]
     except Exception as e:

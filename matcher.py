@@ -328,9 +328,7 @@ def match_list_of_files(logger, paths, idx):
                 
             else:
                 # Subsequent crossmatches: match current_result with next file
-                file_path = paths[i + 1]
-                print(file_path)
-                
+                file_path = paths[i + 1]            
                 logger.info(f"Subsequent crossmatch with: {file_path.stem}")
                 
                 # Save current result to temporary file
@@ -344,7 +342,6 @@ def match_list_of_files(logger, paths, idx):
                 current_result = post_process_subsequent_crossmatch(logger, crossmatch_df, new_zpt)
                 
                 logger.info(f"Crossmatch {i} completed: {len(current_result)} rows.")
-        print("Why not here?")
         # Clean up columns we don't want in the final output
         final_columns = ['RA', 'Dec', 'M', 'dM', 'M_range', 'n1', 'n3', 'n+', 'n_total', 'Separation']
         available_columns = [col for col in final_columns if col in current_result.columns]
