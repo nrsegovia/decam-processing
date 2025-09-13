@@ -307,6 +307,7 @@ def match_list_of_files(logger, paths, idx):
     
     try:
         # Iteratively crossmatch files
+        print(len(paths)) # Debug
         for i in range(len(paths) - 1):
             if first_crossmatch:
                 # First crossmatch: match file[0] with file[1]
