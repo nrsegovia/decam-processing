@@ -144,18 +144,7 @@ def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, wo
     for number_ccd in these_ccds:
         current_ccd = str(number_ccd)
         logger.info(f"Working on CCD {current_ccd}.")
-        # One worker per band max
-        with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            # Submit all tasks
-            futures = [executor.submit(create_ccd_band_master_catalog, logger, main_dir, current_ccd, band) for band in bands]
-            # Process results as they complete
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    done_band = future.result()
-                    logger.info(f"{done_band}-band processing completed successfully.")
-                except Exception as e:
-                    logger.error(f"Found a problem: {e}.")
-
+        create_ccd_band_master_catalog(logger, main_dir, current_ccd, bands)
     logger.info("Batch processing completed!")
 
 def main():

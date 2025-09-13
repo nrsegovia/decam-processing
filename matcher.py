@@ -296,7 +296,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
             except:
                 pass
 
-def match_list_of_files(logger, paths):
+def match_list_of_files(logger, paths, idx):
     # Flag to track if this is the first crossmatch
     first_crossmatch = True
     current_result = None
@@ -352,29 +352,40 @@ def match_list_of_files(logger, paths):
     finally:
         try:
             Path(current_temp_file).unlink()
-            return current_result
+            return current_result, idx
         except:
-            pass
+            return None, None
 
-def create_ccd_band_master_catalog(logger, field_path, ccd, band):
-    subdir = Path(field_path, ccd, band)
-    if subdir.is_dir():
+def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
+    subdirs = [Path(field_path, ccd, band) for band in bands]
+    problems = [not(x.is_dir()) for x in subdirs]
+    any_problem = any(problems)
+    if any_problem:
+        logger.error(f"Problem with directories, check them.")
+    else:
         try:
-            directory_path = Path(field_path, ccd, band)
-            to_match = [x for x in directory_path.glob("*.parquet")]
-            logger.info(f"Found {len(to_match)} files to process.")
-            result_df = match_list_of_files(logger, to_match)
-            if result_df is not None and len(result_df) > 0:
-                # Save results
-                output_file = Path(field_path, ccd, f"{ccd}.{band}.catalogue.parquet")
-                result_df.to_parquet(output_file, index = False)
-                logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
-            else:
-                logger.warning(f"No results generated for {subdir.name}")
-                
+            to_match = [[x for x in y.glob("*.parquet")] for y in subdirs]
+            logger.info(f"Found {[len(x) for x in to_match]} files {[b for b in bands]} to process.")
+            # One worker per band max
+            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+                # Submit all tasks
+                futures = [executor.submit(match_list_of_files, logger, file_list, idx) for idx, file_list in enumerate(to_match)]
+                # Process results as they complete
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        result_df, out_idx = future.result()
+                        subdir = to_match[out_idx]
+                        if result_df is not None and len(result_df) > 0:
+                            # Save results
+                            output_file = Path(field_path, ccd, f"{ccd}.{bands[out_idx]}.catalogue.parquet")
+                            result_df.to_parquet(output_file, index = False)
+                            logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
+                        else:
+                            logger.warning(f"No results generated for {subdir.name}")
+                    except Exception as e:
+                        logger.error(f"Found a problem: {e}.")
         except Exception as e:
             logger.error(f"Failed to process directory {subdir.name}: {e}")
-    return band
 
 
 def create_ccd_master_catalog(logger, field_path, ccd, bands = "griz"):
