@@ -374,7 +374,7 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         result_df, out_idx = future.result()
-                        subdir = to_match[out_idx]
+                        subdir = subdirs[out_idx]
                         if result_df is not None and len(result_df) > 0:
                             # Save results
                             output_file = Path(field_path, ccd, f"{ccd}.{bands[out_idx]}.catalogue.parquet")
