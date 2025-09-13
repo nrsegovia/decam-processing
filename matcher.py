@@ -307,7 +307,6 @@ def match_list_of_files(logger, paths, idx):
     
     try:
         # Iteratively crossmatch files
-        print(len(paths)) # Debug
         for i in range(len(paths) - 1):
             if first_crossmatch:
                 # First crossmatch: match file[0] with file[1]
@@ -330,6 +329,7 @@ def match_list_of_files(logger, paths, idx):
             else:
                 # Subsequent crossmatches: match current_result with next file
                 file_path = paths[i + 1]
+                print(file_path)
                 
                 logger.info(f"Subsequent crossmatch with: {file_path.stem}")
                 
