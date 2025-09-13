@@ -75,7 +75,7 @@ def photpipe_to_parquet(path, ccd, band, counter, columns = ['RA', 'Dec', 'M', '
     message = ""
     extraInfoCols = len(infoColumns)
     simplifiedName = f'{ccd}.{band}.{counter}.parquet'
-    infoKeeping = f"{path},{simplifiedName},{counter},"
+    infoKeeping = f"{path},{simplifiedName},"
     try:
         # Read header to acquire important information
         hdul = fits.open(path) 
