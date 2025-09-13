@@ -344,11 +344,13 @@ def match_list_of_files(logger, paths, idx):
                 current_result = post_process_subsequent_crossmatch(logger, crossmatch_df, new_zpt)
                 
                 logger.info(f"Crossmatch {i} completed: {len(current_result)} rows.")
-        
+        print("Why not here?")
         # Clean up columns we don't want in the final output
         final_columns = ['RA', 'Dec', 'M', 'dM', 'M_range', 'n1', 'n3', 'n+', 'n_total', 'Separation']
         available_columns = [col for col in final_columns if col in current_result.columns]
         current_result = current_result[available_columns]
+    except Exception as e:
+        print(e)
         
     finally:
         try:
