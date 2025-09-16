@@ -310,7 +310,7 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             for index, key in enumerate(path_dictionary.keys(), start=1):
                 cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
                         f"values{index}=RA Dec", f"join{index}=always",
-                        f"suffix{index}={key}"]
+                        f"suffix{index}=_{key}"]
 
             cmd += ["fixcols=all",
                 f'nin={len(path_dictionary)}',
