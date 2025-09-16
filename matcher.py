@@ -296,6 +296,54 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
             except:
                 pass
 
+def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
+        """Run STILTS crossmatch between N catalogs."""
+        logger.info(f"Crossmatching catalogs: {path_dictionary.values}")
+        
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+            temp_output = Path(tmp_file.name)
+        
+        try:
+            cmd = [
+                'java', '-jar', STILTS,
+                '-stilts', 'tmatchn']
+            for index, key in enumerate(path_dictionary.keys(), start=1):
+                cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
+                        f"values{index}=RA Dec", f"join{index}=always",
+                        f"suffix{index}={key}"]
+
+            cmd += ["fixcols=all",
+                f'nin={len(path_dictionary)}',
+                'matcher=sky',
+                'multimode=pairs',
+                f"params={CROSSMATCH['radius']}",
+                'omode=out',
+                f'out={temp_output}', 'ofmt=parquet'
+            ]
+            
+            logger.info(f"Running STILTS command...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            df = pd.read_parquet(temp_output)
+            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
+            
+            return df
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"STILTS command failed: {e.stderr}")
+            raise
+        finally:
+            try:
+                temp_output.unlink()
+            except:
+                pass
+
 def match_list_of_files(logger, paths, idx):
     # Flag to track if this is the first crossmatch
     first_crossmatch = True
@@ -388,8 +436,12 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
             logger.error(f"Failed to process directory {subdir.name}: {e}")
 
 
-def create_ccd_master_catalog(logger, field_path, ccd, bands = "griz"):
+def create_ccd_master_catalog(logger, field_path, ccd):
+    # Assumes that griz catalogs have been created, no other option.
+    paths = {x : Path(field_path, ccd, f"{ccd}.{x}.catalogue.parquet") for x in "griz"}
+    matched = stilts_crossmatch_N(logger, paths)
+    lc_directory = Path(field_path, str(ccd), "LightCurves")
+    lc_directory.mkdir(parents=True, exist_ok=True)
 
-    for band in bands:
-        create_ccd_band_master_catalog(logger, field_path, ccd, band)
-    # Once done, load created catalogs per band and match them.
+    # Add additional processing here: remove unwanted columns
+    matched.to_parquet(Path(lc_directory, f"{ccd}.Master.catalogue.parquet"), index = False)

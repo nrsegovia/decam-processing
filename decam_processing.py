@@ -147,6 +147,17 @@ def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, wo
         create_ccd_band_master_catalog(logger, main_dir, current_ccd, bands)
     logger.info("Batch processing completed!")
 
+def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
+    logger.info(f"Started creation of master catalog(s) for CCD(s): {ccds}")
+    if single_ccd:
+        create_ccd_master_catalog(logger, main_dir, ccds)
+        logger.info(f"CCD {ccds} done.")
+    else:
+        for ccd in ccds:
+            create_ccd_master_catalog(logger, main_dir, ccd)
+            logger.info(f"CCD {ccd} done.")
+    logger.info(f"Master catalog for CCD process has finished.")
+
 def main():
     # Create argument parser
     parser = argparse.ArgumentParser(
