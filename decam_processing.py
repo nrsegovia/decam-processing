@@ -229,6 +229,8 @@ def main():
         dcmp_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
     elif mode == "CATALOG_PER_CCD_BAND":
         catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+    elif mode == "MASTER_CATALOG_CCD":
+        master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
 
 if __name__ == "__main__":
     main()
