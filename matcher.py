@@ -438,7 +438,7 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
 
 def create_ccd_master_catalog(logger, field_path, ccd):
     # Assumes that griz catalogs have been created, no other option.
-    paths = {x : Path(field_path, ccd, f"{ccd}.{x}.catalogue.parquet") for x in "griz"}
+    paths = {x : Path(field_path, str(ccd), f"{ccd}.{x}.catalogue.parquet") for x in "griz"}
     matched = stilts_crossmatch_N(logger, paths)
     lc_directory = Path(field_path, str(ccd), "LightCurves")
     lc_directory.mkdir(parents=True, exist_ok=True)
