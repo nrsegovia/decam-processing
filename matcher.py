@@ -8,7 +8,7 @@ import numpy as np
 from utils import *
 import concurrent.futures
 import pyarrow.parquet as pq
-
+import pyarrow
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
 def compute_n_cols(type_col: pd.Series):
@@ -346,64 +346,106 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 pass
 
 def match_list_of_files(logger, paths, idx):
-    # Flag to track if this is the first crossmatch
-    first_crossmatch = True
-    current_result = None
-    
-    # Save current result as temporary file for STILTS
+    """Create single parquet file with all observations (magnitudes and dates)"""
+    # Save current result as temporary file
     with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
         current_temp_file = tmp_file.name
+
+    schema = None
+    writer = None
+    batch_size = 30 # Hard-coded, could change in the future.
+    current_result = None
     
     try:
-        # Iteratively crossmatch files
-        for i in range(len(paths) - 1):
-            if first_crossmatch:
-                # First crossmatch: match file[0] with file[1]
-                file_path_1 = paths[i]
-                file_path_2 = paths[i + 1]
-                
-                logger.info(f"First crossmatch: {file_path_1.stem} with {file_path_2.stem}")
-                
-                # Crossmatch the two files directly
-                crossmatch_df = stilts_crossmatch_pair(logger, file_path_1, file_path_2)
-                # Get required zeropoints
-                zpt_one = get_from_header(file_path_1, "ZPTMAG")
-                zpt_two = get_from_header(file_path_2, "ZPTMAG")
-                # Post-process for first crossmatch
-                current_result = post_process_first_crossmatch(logger, crossmatch_df, zpt_one, zpt_two)
-                
-                first_crossmatch = False
-                logger.info(f"First crossmatch completed: {len(current_result)} rows")
-                
-            else:
-                # Subsequent crossmatches: match current_result with next file
-                file_path = paths[i + 1]            
-                logger.info(f"Subsequent crossmatch with: {file_path.stem}")
-                
-                # Save current result to temporary file
-                current_result.to_parquet(current_temp_file, index=False)
-                
-                # Crossmatch current result with next file
-                crossmatch_df = stilts_crossmatch_pair(logger, Path(current_temp_file), file_path)
-                new_zpt = get_from_header(file_path, "ZPTMAG")
+        zpt = get_from_header(paths[0], "ZPTMAG")
+        mjd = get_from_header(paths[0], "MJD-OBS")
+        for i in range(0, len(paths), batch_size):
+            batch_files = paths[i:i+batch_size]
+            batch_dfs = []
+            for file in batch_files:
+                df = pd.read_parquet(file, engine='pyarrow')
+                # Apply ZP and add date column
+                df['M'] += zpt
+                df['MJD'] = mjd
+                batch_dfs.append(df)
+            
+            # Concatenate batch
+            batch_df = pd.concat(batch_dfs, ignore_index=True)
+            table = pyarrow.Table.from_pandas(batch_df)
+            
+            # Initialize writer on first batch
+            if writer is None:
+                schema = table.schema
+                writer = pq.ParquetWriter(current_temp_file, schema=schema)
+            
+            writer.write_table(table)
+            logger.info(f"Streamed batch {i//batch_size + 1}")
+        
+        # For now, just return the temp file
+        current_result = pd.read_parquet(current_temp_file, engine='pyarrow')
 
-                # Post-process subsequent crossmatch
-                current_result = post_process_subsequent_crossmatch(logger, crossmatch_df, new_zpt)
-                
-                logger.info(f"Crossmatch {i} completed: {len(current_result)} rows.")
-        # Clean up columns we don't want in the final output
-        final_columns = ['RA', 'Dec', 'M', 'dM', 'M_range', 'n1', 'n3', 'n+', 'n_total', 'Separation']
-        available_columns = [col for col in final_columns if col in current_result.columns]
-        current_result = current_result[available_columns]
     except Exception as e:
         logger.error(e)
-        
+
     finally:
+        if writer:
+            writer.close()
         try:
             Path(current_temp_file).unlink()
             return current_result, idx
         except:
             return None, None
+
+    # try:
+    #     # Iteratively crossmatch files
+    #     for i in range(len(paths) - 1):
+    #         if first_crossmatch:
+    #             # First crossmatch: match file[0] with file[1]
+    #             file_path_1 = paths[i]
+    #             file_path_2 = paths[i + 1]
+                
+    #             logger.info(f"First crossmatch: {file_path_1.stem} with {file_path_2.stem}")
+                
+    #             # Crossmatch the two files directly
+    #             crossmatch_df = stilts_crossmatch_pair(logger, file_path_1, file_path_2)
+    #             # Get required zeropoints
+    #             zpt_one = get_from_header(file_path_1, "ZPTMAG")
+    #             zpt_two = get_from_header(file_path_2, "ZPTMAG")
+    #             # Post-process for first crossmatch
+    #             current_result = post_process_first_crossmatch(logger, crossmatch_df, zpt_one, zpt_two)
+                
+    #             first_crossmatch = False
+    #             logger.info(f"First crossmatch completed: {len(current_result)} rows")
+                
+    #         else:
+    #             # Subsequent crossmatches: match current_result with next file
+    #             file_path = paths[i + 1]            
+    #             logger.info(f"Subsequent crossmatch with: {file_path.stem}")
+                
+    #             # Save current result to temporary file
+    #             current_result.to_parquet(current_temp_file, index=False)
+                
+    #             # Crossmatch current result with next file
+    #             crossmatch_df = stilts_crossmatch_pair(logger, Path(current_temp_file), file_path)
+    #             new_zpt = get_from_header(file_path, "ZPTMAG")
+
+    #             # Post-process subsequent crossmatch
+    #             current_result = post_process_subsequent_crossmatch(logger, crossmatch_df, new_zpt)
+                
+    #             logger.info(f"Crossmatch {i} completed: {len(current_result)} rows.")
+    #     # Clean up columns we don't want in the final output
+    #     final_columns = ['RA', 'Dec', 'M', 'dM', 'M_range', 'n1', 'n3', 'n+', 'n_total', 'Separation']
+    #     available_columns = [col for col in final_columns if col in current_result.columns]
+    #     current_result = current_result[available_columns]
+    # except Exception as e:
+    #     logger.error(e)
+        
+    # finally:
+    #     try:
+    #         Path(current_temp_file).unlink()
+    #         return current_result, idx
+    #     except:
+    #         return None, None
 
 def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
     subdirs = [Path(field_path, ccd, band) for band in bands]
