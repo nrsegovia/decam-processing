@@ -354,7 +354,8 @@ def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
         
         try:
             cmd = [
-                'java', '-jar', STILTS,
+                'java', '-Xms16G', '-Xmx64G', # starting and maximum memory... perhaps add customization option later
+                '-jar', STILTS,
                 '-stilts', 'tmatch1',
                 'action=identify',
                 f"in={catalog_path}", 'ifmt=parquet',
