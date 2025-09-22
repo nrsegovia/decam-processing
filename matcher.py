@@ -345,6 +345,49 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             except:
                 pass
 
+def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
+        """Run STILTS crossmatch between two catalogs."""
+        logger.info(f"Finding groups in {catalog_path.name} via STILTS internal match")
+        
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+            temp_output = Path(tmp_file.name)
+        
+        try:
+            cmd = [
+                'java', '-jar', STILTS,
+                '-stilts', 'tmatch1',
+                'action=identify',
+                f"in={catalog_path}", 'ifmt=parquet',
+                'matcher=sky',
+                f"values={CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
+                f"params={CROSSMATCH['radius']}",
+                'omode=out',
+                f'out={temp_output}', 'ofmt=parquet'
+            ]
+            
+            logger.info(f"Running STILTS command...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            df = pd.read_parquet(temp_output)
+            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
+            
+            return df
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"STILTS command failed: {e.stderr}")
+            raise
+        finally:
+            try:
+                temp_output.unlink()
+            except:
+                pass
+
 def match_list_of_files(logger, paths, idx):
     """Create single parquet file with all observations (magnitudes and dates)"""
     # Save current result as temporary file
@@ -355,6 +398,7 @@ def match_list_of_files(logger, paths, idx):
     writer = None
     batch_size = 30 # Hard-coded, could change in the future.
     current_result = None
+    all_rows = None
     
     try:
         zpt = get_from_header(paths[0], "ZPTMAG")
@@ -384,7 +428,11 @@ def match_list_of_files(logger, paths, idx):
         # For now, just return the temp file
         if writer:
             writer.close()
-        current_result = pd.read_parquet(current_temp_file, engine='pyarrow')
+        # Here stilts internal match, all_rows should contain a column with groups
+        # while current_result a single row per group. Perhaps include statistics?
+        # all_rows = stilts_internal_match(logger, Path(current_temp_file))
+        current_result = stilts_internal_match(logger, Path(current_temp_file))
+
 
     except Exception as e:
         logger.error(e)
@@ -392,9 +440,9 @@ def match_list_of_files(logger, paths, idx):
     finally:
         try:
             Path(current_temp_file).unlink()
-            return current_result, idx
+            return current_result, all_rows, idx
         except:
-            return None, None
+            return None, None, None
 
     # try:
     #     # Iteratively crossmatch files
@@ -464,7 +512,7 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
                 # Process results as they complete
                 for future in concurrent.futures.as_completed(futures):
                     try:
-                        result_df, out_idx = future.result()
+                        result_df, _, out_idx = future.result()
                         subdir = subdirs[out_idx]
                         if result_df is not None and len(result_df) > 0:
                             # Save results
