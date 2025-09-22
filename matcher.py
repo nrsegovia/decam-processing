@@ -382,14 +382,14 @@ def match_list_of_files(logger, paths, idx):
             logger.info(f"Streamed batch {i//batch_size + 1}")
         
         # For now, just return the temp file
+        if writer:
+            writer.close()
         current_result = pd.read_parquet(current_temp_file, engine='pyarrow')
 
     except Exception as e:
         logger.error(e)
 
     finally:
-        if writer:
-            writer.close()
         try:
             Path(current_temp_file).unlink()
             return current_result, idx
