@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from utils import *
 import concurrent.futures
+import pyarrow.parquet as pq
 
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
