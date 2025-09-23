@@ -388,7 +388,6 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
             # Generate a sequence that continues from max group and assign to NaNs
             max_group = int(df['GroupID'].max()) + 1
             logger.info("1")
-            logger.info(max_group, nan_mask.sum(), max_group + nan_mask.sum())
             df.loc[nan_mask, 'GroupID'] = range(max_group, max_group + nan_mask.sum())
             logger.info("2")
             df.to_parquet(temp_output, index = False)
