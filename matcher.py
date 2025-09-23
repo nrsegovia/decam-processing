@@ -352,6 +352,10 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
         
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
             temp_output = Path(tmp_file.name)
+        
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file2:
+            temp_output2 = Path(tmp_file2.name)
+
         if do_centroids:
             with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file_centroid:
                 temp_output_centroid = Path(tmp_file_centroid.name)
@@ -387,15 +391,14 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
             nan_mask = df['GroupID'].isna()
             # Generate a sequence that continues from max group and assign to NaNs
             max_group = int(df['GroupID'].max()) + 1
-            logger.info("1")
             df.loc[nan_mask, 'GroupID'] = range(max_group, max_group + nan_mask.sum())
-            logger.info("2")
-            df.to_parquet(temp_output, index = False)
+            df.to_parquet(temp_output2, index = False)
+
             if do_centroids:
                 cmd_centroid = [
                     'java', '-jar', STILTS,
                     '-stilts', 'tgroup',
-                    f"in={temp_output}", 'ifmt=parquet',
+                    f"in={temp_output2}", 'ifmt=parquet',
                     f'keys={keys}',
                     f"aggcols=0;count {CROSSMATCH['col1_ra']};mean {CROSSMATCH['col1_dec']};mean",
                     'omode=out',
@@ -425,6 +428,7 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
         finally:
             try:
                 temp_output.unlink()
+                temp_output2.unlink()
                 if do_centroids:
                     temp_output_centroid.unlink()
             except:
