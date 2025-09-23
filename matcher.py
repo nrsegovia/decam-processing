@@ -386,8 +386,8 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
             # Find where GroupID is NaN (non-matched)
             nan_mask = df['GroupID'].isna()
             # Generate a sequence that continues from max group and assign to NaNs
-            max_group = int(df['GroupID'].max())
-            df.loc[nan_mask, 'GroupID'] = range(max_group + 1, nan_mask.sum() + 2)
+            max_group = int(df['GroupID'].max()) + 1
+            df.loc[nan_mask, 'GroupID'] = range(max_group, max_group + nan_mask.sum() + 1)
 
             if do_centroids:
                 cmd_centroid = [
