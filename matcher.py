@@ -415,8 +415,10 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
                 if batch_n >= 0:
                     df_centroid["batch"] = batch_n
                 # Update coordinates to use mean values
-                # df_centroid.drop([CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']], axis=1, inplace=True)
-                # df_centroid.rename(columns={CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']})
+                df_centroid.drop([CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']], axis=1, inplace=True)
+                print(df_centroid.columns)
+                exit()
+                # df_centroid.rename(columns={CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']}, inplace=True)
 
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
@@ -441,8 +443,6 @@ def match_list_of_files(logger, paths, idx):
     subsets = None
     
     try:
-        zpt = get_from_header(paths[0], "ZPTMAG")
-        mjd = get_from_header(paths[0], "MJD-OBS")
         subsets = [] # Internally crossmatched batches, dataframes
         subset_centroids = [] # Only mean coordinates and group names
         for i in range(0, len(paths), batch_size):
@@ -452,6 +452,8 @@ def match_list_of_files(logger, paths, idx):
             batch_files = paths[i:i+batch_size]
             batch_dfs = []
             for file in batch_files:
+                zpt = get_from_header(file, "ZPTMAG")
+                mjd = get_from_header(file, "MJD-OBS")
                 df = pd.read_parquet(file, engine='pyarrow')
                 # Apply ZP and add date column
                 df['M'] += zpt
@@ -472,7 +474,7 @@ def match_list_of_files(logger, paths, idx):
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_final:
             final_temp_file = tmp_final.name
         final_df = pd.concat(subset_centroids, ignore_index=True)
-        final_df.rename(columns={"GroupID" : "GroupID_batch"})
+        final_df.rename(columns={"GroupID" : "GroupID_batch"}, inplace=True)
         final_df.to_parquet(final_temp_file, index=False)
 
         current_result, _ = stilts_internal_match(logger, Path(final_temp_file))
@@ -562,13 +564,14 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
                         if result_df is not None and len(result_df) > 0:
                             # Save results
                             output_file = Path(field_path, ccd, f"{ccd}.{bands[out_idx]}.catalogue.parquet")
-                            batch_path = Path(field_path, ccd, f"{ccd}_batches")
+                            batch_path = Path(field_path, ccd, "batches")
                             batch_path.mkdir(parents=True, exist_ok=True)
 
                             result_df.to_parquet(output_file, index = False)
                             for batch_info in batch_dfs:
                                 batch_df, batch_num = batch_info
                                 batch_df.to_parquet(Path(batch_path, f"{batch_num}.parquet"), index = False)
+                                logger.info(f"Created parquet for batch number {batch_num}")
                             logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
                         else:
                             logger.warning(f"No results generated for {subdir.name}")
