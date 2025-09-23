@@ -386,7 +386,7 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1) -> Tu
                 '-stilts', 'tgroup',
                 f"in={temp_output}", 'ifmt=parquet',
                 'keys=GroupID',
-                f"aggcols='0;count {CROSSMATCH['col1_ra']};mean {CROSSMATCH['col1_dec']};mean'",
+                f'aggcols="0;count {CROSSMATCH["col1_ra"]};mean {CROSSMATCH["col1_dec"]};mean"',
                 'omode=out',
                 f'out={temp_output_centroid}', 'ofmt=parquet'
             ]
