@@ -414,8 +414,6 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
                 df_centroid = pd.read_parquet(temp_output_centroid)
                 if batch_n >= 0:
                     df_centroid["batch"] = batch_n
-                # Update coordinates to use mean values
-                df_centroid.drop([CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']], axis=1, inplace=True)
                 print(df_centroid.columns)
                 exit()
                 # df_centroid.rename(columns={CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']}, inplace=True)
