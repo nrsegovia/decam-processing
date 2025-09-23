@@ -354,15 +354,16 @@ def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
         
         try:
             cmd = [
-                'java', '-Xms16G', '-Xmx64G', # starting and maximum memory... perhaps add customization option later
+                'java', '-Xms8G', '-Xmx32G', # starting and maximum memory... perhaps add customization option later
                 '-jar', STILTS,
                 '-stilts', 'tmatch1',
                 'action=identify',
+                f"icmd=sort {CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
                 f"in={catalog_path}", 'ifmt=parquet',
                 'matcher=sky',
                 f"values={CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
                 f"params={CROSSMATCH['radius']}",
-                "tuning=10", # This should probably be set as a constant in constants.py
+                "tuning=12", # This should probably be set as a constant in constants.py
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
