@@ -358,7 +358,7 @@ def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
                 '-jar', STILTS,
                 '-stilts', 'tmatch1',
                 'action=identify',
-                f"icmd=sort {CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
+                f"icmd=sort '{CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}'",
                 f"in={catalog_path}", 'ifmt=parquet',
                 'matcher=sky',
                 f"values={CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
