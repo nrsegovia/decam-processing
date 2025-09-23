@@ -386,7 +386,7 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1) -> Tu
                 '-stilts', 'tgroup',
                 f"in={temp_output}", 'ifmt=parquet',
                 'keys=GroupID',
-                f"aggcols='0;count mean{CROSSMATCH['col1_ra']} mean{CROSSMATCH['col1_dec']}'",
+                f"aggcols='0;count {CROSSMATCH['col1_ra']};mean {CROSSMATCH['col1_dec']};mean'",
                 'omode=out',
                 f'out={temp_output_centroid}', 'ofmt=parquet'
             ]
@@ -400,6 +400,8 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1) -> Tu
 
             df = pd.read_parquet(temp_output)
             df_centroid = pd.read_parquet(temp_output_centroid)
+            #df_centroid.drop([CROSSMATCH['col1_ra'], CROSSMATCH['col1_dec']], axis=1, inplace=True)
+            # must change this to use the mean values as new RA and Dec
             if batch_n >= 0:
                 df_centroid["batch"] = batch_n
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
