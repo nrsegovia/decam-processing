@@ -9,6 +9,7 @@ from utils import *
 import concurrent.futures
 import pyarrow.parquet as pq
 import pyarrow
+from typing import Tuple
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
 def compute_n_cols(type_col: pd.Series):
@@ -345,13 +346,16 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             except:
                 pass
 
-def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
+def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Run STILTS crossmatch between two catalogs."""
         logger.info(f"Finding groups in {catalog_path.name} via STILTS internal match")
         
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
             temp_output = Path(tmp_file.name)
         
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file_centroid:
+            temp_output_centroid = Path(tmp_file_centroid.name)
+
         try:
             cmd = [
                 'java', '-Xms8G', '-Xmx32G', # starting and maximum memory... perhaps add customization option later
@@ -363,7 +367,7 @@ def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
                 'matcher=sky',
                 f"values={CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
                 f"params={CROSSMATCH['radius']}",
-                "tuning=12", # This should probably be set as a constant in constants.py
+#                "tuning=12", # This should probably be set as a constant in constants.py
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
@@ -377,10 +381,30 @@ def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
                 check=True
             )
             
+            cmd_centroid = [
+                'java', '-jar', STILTS,
+                '-stilts', 'tgroup',
+                f"in={temp_output}", 'ifmt=parquet',
+                'keys=GroupID',
+                f"aggcols='0;count mean{CROSSMATCH['col1_ra']} mean{CROSSMATCH['col1_dec']}'",
+                'omode=out',
+                f'out={temp_output_centroid}', 'ofmt=parquet'
+            ]
+            
+            result_centroid = subprocess.run(
+                cmd_centroid,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
             df = pd.read_parquet(temp_output)
+            df_centroid = pd.read_parquet(temp_output_centroid)
+            if batch_n >= 0:
+                df_centroid["batch"] = batch_n
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
-            return df
+            return df, df_centroid
             
         except subprocess.CalledProcessError as e:
             logger.error(f"STILTS command failed: {e.stderr}")
@@ -388,25 +412,25 @@ def stilts_internal_match(logger,  catalog_path: Path) -> pd.DataFrame:
         finally:
             try:
                 temp_output.unlink()
+                temp_output_centroid.unlink()
             except:
                 pass
 
 def match_list_of_files(logger, paths, idx):
     """Create single parquet file with all observations (magnitudes and dates)"""
-    # Save current result as temporary file
-    with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-        current_temp_file = tmp_file.name
-
-    schema = None
-    writer = None
     batch_size = 30 # Hard-coded, could change in the future.
     current_result = None
-    all_rows = None
+    subsets = None
     
     try:
         zpt = get_from_header(paths[0], "ZPTMAG")
         mjd = get_from_header(paths[0], "MJD-OBS")
+        subsets = [] # Internally crossmatched batches, dataframes
+        subset_centroids = [] # Only mean coordinates and group names
         for i in range(0, len(paths), batch_size):
+            # Save current result as temporary file
+            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                current_temp_file = tmp_file.name
             batch_files = paths[i:i+batch_size]
             batch_dfs = []
             for file in batch_files:
@@ -416,25 +440,24 @@ def match_list_of_files(logger, paths, idx):
                 df['MJD'] = mjd
                 batch_dfs.append(df)
             
-            # Concatenate batch
+            # Concatenate batch and save temp
             batch_df = pd.concat(batch_dfs, ignore_index=True)
-            table = pyarrow.Table.from_pandas(batch_df)
-            
-            # Initialize writer on first batch
-            if writer is None:
-                schema = table.schema
-                writer = pq.ParquetWriter(current_temp_file, schema=schema)
-            
-            writer.write_table(table)
-            logger.info(f"Streamed batch {i//batch_size + 1}")
+            batch_df.to_parquet(current_temp_file, index=False)
+            logger.info(f"Joined batch {i//batch_size + 1}")
+            full_output, collapsed_output = stilts_internal_match(logger, Path(current_temp_file), i)
+            subsets.append(full_output)
+            subset_centroids.append(collapsed_output)
+            Path(current_temp_file).unlink()
         
-        # For now, just return the temp file
-        if writer:
-            writer.close()
+        # Save current result as temporary file
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_final:
+            final_temp_file = tmp_final.name
+        final_df = pd.concat(subset_centroids, ignore_index=True)
+        final_df.to_parquet(final_temp_file, index=False)
         # Here stilts internal match, all_rows should contain a column with groups
         # while current_result a single row per group. Perhaps include statistics?
         # all_rows = stilts_internal_match(logger, Path(current_temp_file))
-        current_result = stilts_internal_match(logger, Path(current_temp_file))
+        _, current_result = stilts_internal_match(logger, Path(final_temp_file))
 
 
     except Exception as e:
@@ -442,8 +465,8 @@ def match_list_of_files(logger, paths, idx):
 
     finally:
         try:
-            Path(current_temp_file).unlink()
-            return current_result, all_rows, idx
+            Path(final_temp_file).unlink()
+            return current_result, subsets, idx
         except:
             return None, None, None
 
@@ -516,6 +539,7 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         result_df, _, out_idx = future.result()
+                        # This must be adapted to store the parquet batch files 
                         subdir = subdirs[out_idx]
                         if result_df is not None and len(result_df) > 0:
                             # Save results
