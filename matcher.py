@@ -387,8 +387,10 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
             nan_mask = df['GroupID'].isna()
             # Generate a sequence that continues from max group and assign to NaNs
             max_group = df['GroupID'].max()
+            print(max_group)
             df.loc[nan_mask, 'GroupID'] = range(max_group + 1, nan_mask.sum() + 2)
-            
+            print("Here")
+
             if do_centroids:
                 cmd_centroid = [
                     'java', '-jar', STILTS,
