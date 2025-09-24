@@ -217,7 +217,7 @@ def main():
     bands, single_band = args.bands
     main_dir, path_only = args.directory
     if path_only:
-        main_dir = Path(ALL_FIELDS[args.directory])
+        main_dir = Path(ALL_FIELDS[main_dir])
     mode = args.mode
     workers = args.workers
 
