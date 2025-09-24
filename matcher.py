@@ -334,6 +334,10 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             )
             
             df = pd.read_parquet(temp_output)
+            # Create single sky coordinates based on wavelength importance (blue > red)
+            df['RA'] = df[[f"RA_{x}" for x in "griz"]].bfill(axis=1).iloc[:, 0]
+            df['Dec'] = df[[f"Dec_{x}" for x in "griz"]].bfill(axis=1).iloc[:, 0]
+            
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
             return df
