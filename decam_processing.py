@@ -161,6 +161,9 @@ def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, work
             logger.info(f"CCD {ccd} done.")
     logger.info(f"Master catalog for CCD process has finished.")
 
+def master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
+    pass
+
 def main():
     # Create argument parser
     parser = argparse.ArgumentParser(
@@ -252,7 +255,7 @@ def main():
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
-            master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+            master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
 
 if __name__ == "__main__":
     main()
