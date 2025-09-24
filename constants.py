@@ -32,7 +32,7 @@ MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old fi
 MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])
 
 # Crossmtach and lightcurve creation configuration.
-CROSSMATCH = {"radius"    : 0.5,
+CROSSMATCH = {"radius"    : 0.1,
               "col1_ra"   : "RA",
               "col1_dec"  : "Dec",
               "col2_ra"   : "RA",

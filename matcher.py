@@ -371,7 +371,7 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
                 'matcher=sky',
                 f"values={CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
                 f"params={CROSSMATCH['radius']}",
-#                "tuning=12", # This should probably be set as a constant in constants.py
+                "tuning=18", # This should probably be set as a constant in constants.py
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
