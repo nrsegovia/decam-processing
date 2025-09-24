@@ -485,57 +485,6 @@ def match_list_of_files(logger, paths, idx):
         except:
             return None, None, None
 
-    # try:
-    #     # Iteratively crossmatch files
-    #     for i in range(len(paths) - 1):
-    #         if first_crossmatch:
-    #             # First crossmatch: match file[0] with file[1]
-    #             file_path_1 = paths[i]
-    #             file_path_2 = paths[i + 1]
-                
-    #             logger.info(f"First crossmatch: {file_path_1.stem} with {file_path_2.stem}")
-                
-    #             # Crossmatch the two files directly
-    #             crossmatch_df = stilts_crossmatch_pair(logger, file_path_1, file_path_2)
-    #             # Get required zeropoints
-    #             zpt_one = get_from_header(file_path_1, "ZPTMAG")
-    #             zpt_two = get_from_header(file_path_2, "ZPTMAG")
-    #             # Post-process for first crossmatch
-    #             current_result = post_process_first_crossmatch(logger, crossmatch_df, zpt_one, zpt_two)
-                
-    #             first_crossmatch = False
-    #             logger.info(f"First crossmatch completed: {len(current_result)} rows")
-                
-    #         else:
-    #             # Subsequent crossmatches: match current_result with next file
-    #             file_path = paths[i + 1]            
-    #             logger.info(f"Subsequent crossmatch with: {file_path.stem}")
-                
-    #             # Save current result to temporary file
-    #             current_result.to_parquet(current_temp_file, index=False)
-                
-    #             # Crossmatch current result with next file
-    #             crossmatch_df = stilts_crossmatch_pair(logger, Path(current_temp_file), file_path)
-    #             new_zpt = get_from_header(file_path, "ZPTMAG")
-
-    #             # Post-process subsequent crossmatch
-    #             current_result = post_process_subsequent_crossmatch(logger, crossmatch_df, new_zpt)
-                
-    #             logger.info(f"Crossmatch {i} completed: {len(current_result)} rows.")
-    #     # Clean up columns we don't want in the final output
-    #     final_columns = ['RA', 'Dec', 'M', 'dM', 'M_range', 'n1', 'n3', 'n+', 'n_total', 'Separation']
-    #     available_columns = [col for col in final_columns if col in current_result.columns]
-    #     current_result = current_result[available_columns]
-    # except Exception as e:
-    #     logger.error(e)
-        
-    # finally:
-    #     try:
-    #         Path(current_temp_file).unlink()
-    #         return current_result, idx
-    #     except:
-    #         return None, None
-
 def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
     subdirs = [Path(field_path, ccd, band) for band in bands]
     problems = [not(x.is_dir()) for x in subdirs]
@@ -565,7 +514,7 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
                             result_df.to_parquet(output_file, index = False)
                             for batch_info in batch_dfs:
                                 batch_df, batch_num = batch_info
-                                batch_df.to_parquet(Path(batch_path, f"{batch_num}.parquet"), index = False)
+                                batch_df.to_parquet(Path(batch_path, f"{bands[out_idx]}.{batch_num}.parquet"), index = False)
                                 logger.info(f"Created parquet for batch number {batch_num}")
                             logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
                         else:
