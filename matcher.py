@@ -529,8 +529,5 @@ def create_ccd_master_catalog(logger, field_path, ccd):
     # Assumes that griz catalogs have been created, no other option.
     paths = {x : Path(field_path, str(ccd), f"{ccd}.{x}.catalogue.parquet") for x in "griz"}
     matched = stilts_crossmatch_N(logger, paths)
-    lc_directory = Path(field_path, str(ccd), "LightCurves")
-    lc_directory.mkdir(parents=True, exist_ok=True)
 
-    # Add additional processing here: remove unwanted columns
-    matched.to_parquet(Path(lc_directory, f"{ccd}.Master.catalogue.parquet"), index = False)
+    matched.to_parquet(Path(field_path, str(ccd), f"{ccd}.master.catalogue.parquet"), index = False)

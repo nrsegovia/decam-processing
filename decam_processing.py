@@ -17,6 +17,7 @@ Main script. Call other functions and constants from here
 
 local = Path(__file__).parent
 valid_fields = list(ALL_FIELDS.keys())
+valid_global = list(GLOBAL_NAME_ONLY.keys())
 valid_modes = list(MODES.keys())
 valid_bands = "griz"
 
@@ -78,9 +79,11 @@ def parse_bands(value):
 
 def parse_directory(value):
     if value in valid_fields:
-        return value
+        return value, True
+    elif value in valid_global:
+        return value, False
     else:
-        raise argparse.ArgumentTypeError(f"Invalid directory: '{value}'. Expected one of {valid_fields}.")
+        raise argparse.ArgumentTypeError(f"Invalid directory: '{value}'. Expected one of {valid_fields} or {valid_global}.")
     
 def parse_mode(value):
     if value in valid_modes:
@@ -170,7 +173,7 @@ def main():
         '--directory', 
         type=parse_directory, 
         required=True,
-        help=f'Name of the directory as defined in the constants.py file: {valid_fields}.'
+        help=f'Name of the directory or global set name as defined in the constants.py file: {valid_fields} or {valid_global}.'
     )
     
     parser.add_argument(
@@ -212,7 +215,9 @@ def main():
     args = parser.parse_args()
     ccds, single_ccd = args.ccds
     bands, single_band = args.bands
-    main_dir = Path(ALL_FIELDS[args.directory])
+    main_dir, path_only = args.directory
+    if path_only:
+        main_dir = Path(ALL_FIELDS[args.directory])
     mode = args.mode
     workers = args.workers
 
@@ -224,13 +229,30 @@ def main():
     logger = logging.getLogger(__name__)
 
     if mode == "HDF_TO_PARQUET":
-        hdf_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        if path_only:
+            hdf_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        else:
+            logger.error("This mode is only available for single directories, not global ones. Aborting.")
     elif mode == "DCMP_TO_PARQUET":
-        dcmp_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        if path_only:
+            dcmp_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        else:
+            logger.error("This mode is only available for single directories, not global ones. Aborting.")
     elif mode == "CATALOG_PER_CCD_BAND":
-        catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        if path_only:
+            catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        else:
+            logger.error("This mode is only available for single directories, not global ones. Aborting.")
     elif mode == "MASTER_CATALOG_CCD":
-        master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        if path_only:
+            master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+        else:
+            logger.error("This mode is only available for single directories, not global ones. Aborting.")
+    elif mode == "MASTER_CATALOG":
+        if path_only:
+            logger.error("This mode is only available for global directories, not single ones. Aborting.")
+        else:
+            master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
 
 if __name__ == "__main__":
     main()

@@ -19,6 +19,18 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
               "B1" : "/data/DECAMNOAO/ShoCd/workspace/b1/", # Note: incomplete processing
               }
 
+GLOBAL_NAME_ONLY = {
+              "EAST" : ["/data/DECAMNOAO/ShoCd/workspace/decaps_east_shocd/",
+                        "/data/DECAMNOAO/ShoCd/workspace/decaps_east_regular/",
+                        "/data/DECAMNOAO/ShoCd/workspace/decaps_east_regular2/",
+                        "/data/DECAMNOAO/ShoCd/workspace/decaps_east_240728/"], #YYDDMM
+              "WEST" : ["/data/DECAMNOAO/ShoCd/workspace/decaps_west1/",
+                        "/data/DECAMNOAO/ShoCd/workspace/decaps_west/"],
+              "ETA"  : ["/data/DECAMNOAO/ShoCd/workspace/eta_carinae_gp/",
+                        "/data/DECAMNOAO/ShoCd/workspace/eta_carinae_bp/"], # Bad as in unwanted offset in pointing
+              "B1"   : ["/data/DECAMNOAO/ShoCd/workspace/b1/"], # Note: incomplete processing
+              }
+
 # STILTS or TOPCAT path. Must be the parquet-compatible version, usually topcat-extra.jar
 
 STILTS = "/data/DECAMNOAO/ShoCd/code/src/topcat-extra.jar"
@@ -27,7 +39,8 @@ STILTS = "/data/DECAMNOAO/ShoCd/code/src/topcat-extra.jar"
 MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old files are removed.",
          "DCMP_TO_PARQUET" : "Convert dcmp files in a directory created by photpipe to parquet. New subdirectories per each requested band are created.",
          "CATALOG_PER_CCD_BAND" : "Creates catalog of all sources observed at least once as type 1 or 3 in a given configuration of field-ccd-band(s). Uses STILTS, so the number of workers set here is irrelevant.",
-         "MASTER_CATALOG_CCD" : "Creates single master catalog for each CCD in the provided range, using all four photometric bands (assumes that the corresponding per-band catalogues have been created)."}
+         "MASTER_CATALOG_CCD" : "Creates single master catalog for each CCD in the provided range, using all four photometric bands (assumes that the corresponding per-band catalogues have been created).",
+         "MASTER_CATALOG" : "Creates single master catalog for each CCD in the provided range, using ALL observation subsets included in a given global directory. Assumes that the master catalogues per ccd per single directory have already been created."}
 
 MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])
 
