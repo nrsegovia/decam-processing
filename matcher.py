@@ -353,6 +353,64 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             except:
                 pass
 
+def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
+        """Run STILTS crossmatch between N catalogs."""
+        logger.info(f"Crossmatching catalogs: {path_dictionary.values}")
+        
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+            temp_output = Path(tmp_file.name)
+        
+        try:
+            ra_cols = []
+            dec_cols = []
+            cmd = [
+                'java', '-jar', STILTS,
+                '-stilts', 'tmatchn']
+            for index, key in enumerate(path_dictionary.keys(), start=1):
+                ra_cols.append(f"RA_{key}")
+                dec_cols.append(f"Dec_{key}")
+                cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
+                        f"values{index}=RA Dec", f"join{index}=always",
+                        f"icmd{index}=keepcols '$3 $6 $9 $12 $13 $14'",
+                        f"suffix{index}=_{key}"]
+
+            cmd += ["fixcols=all",
+                f'nin={len(path_dictionary)}',
+                'matcher=sky',
+                'multimode=pairs',
+                f"params={CROSSMATCH['radius_matchn']}",
+                'omode=out',
+                f'out={temp_output}', 'ofmt=parquet'
+            ]
+            
+            logger.info(f"Running STILTS command...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            df = pd.read_parquet(temp_output)
+            # Create single sky coordinates based on average
+            df['RA'] = df[ra_cols].mean(axis=1)
+            df['Dec'] = df[dec_cols].mean(axis=1)
+            
+            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
+            
+            return df
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"STILTS command failed: {e.stderr}")
+            raise
+        finally:
+            try:
+                temp_output.unlink()
+            except:
+                pass
+
+
 def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys : str = "GroupID", do_centroids: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Run STILTS crossmatch between two catalogs."""
         logger.info(f"Finding groups in {catalog_path.name} via STILTS internal match")
@@ -542,7 +600,7 @@ def create_ccd_master_catalog(logger, field_path, ccd):
 def create_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Assumes that ccd master catalogs have been created, no other option.
     paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in range(len(field_paths))}
-    matched = stilts_crossmatch_N(logger, paths_to_master_cats)
+    matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
     # Create and save CCD edges
     json_file = Path(out_dir, "fields_info.json")
     if json_file.exists():
