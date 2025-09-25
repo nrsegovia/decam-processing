@@ -1,4 +1,4 @@
-import logging
+# import logging
 from pathlib import Path
 import tempfile
 from constants import *
@@ -7,9 +7,11 @@ import pandas as pd
 import numpy as np
 from utils import *
 import concurrent.futures
-import pyarrow.parquet as pq
-import pyarrow
+# import pyarrow.parquet as pq
+# import pyarrow
 from typing import Tuple
+import json
+
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
 def compute_n_cols(type_col: pd.Series):
@@ -536,3 +538,27 @@ def create_ccd_master_catalog(logger, field_path, ccd):
     matched = stilts_crossmatch_N(logger, paths)
 
     matched.to_parquet(Path(field_path, str(ccd), f"{ccd}.master.catalogue.parquet"), index = False)
+
+def create_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
+    # Assumes that ccd master catalogs have been created, no other option.
+    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in range(len(field_paths))}
+    matched = stilts_crossmatch_N(logger, paths_to_master_cats)
+    # Create and save CCD edges
+    json_file = Path(out_dir, "fields_info.json")
+    if json_file.exists():
+        with open(json_file, 'r') as f:
+            json_data = json.load(f)
+    else:
+        json_data = {}
+    if glob_name not in json_data:
+        json_data[glob_name] = {}
+    if ccd not in json_data[glob_name]:
+        json_data[glob_name][ccd] = {}
+
+    json_data[glob_name][ccd]["RA"] = [matched.RA.min(), matched.RA.max()]
+    json_data[glob_name][ccd]["Dec"] = [matched.Dec.min(), matched.Dec.max()]
+    with open(json_file, 'w') as f:
+        json.dump(json_data, f, indent=3)
+
+    # Save catalogue
+    matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue.parquet"), index = False)

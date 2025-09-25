@@ -161,8 +161,18 @@ def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, work
             logger.info(f"CCD {ccd} done.")
     logger.info(f"Master catalog for CCD process has finished.")
 
-def master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
-    pass
+def master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger):
+    logger.info(f"Started creation of final master catalog(s) for CCD(s): {ccds}")
+    out_dir = Path(local, "output")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if single_ccd:
+        create_master_catalog(logger, glob_name, main_dir, ccds, out_dir)
+        logger.info(f"CCD {ccds} done.")
+    else:
+        for ccd in ccds:
+            create_master_catalog(logger, glob_name, main_dir, ccd, out_dir)
+            logger.info(f"CCD {ccd} done.")
+    logger.info(f"Final master catalog for CCD process has finished.")
 
 def main():
     # Create argument parser
@@ -221,6 +231,10 @@ def main():
     main_dir, path_only = args.directory
     if path_only:
         main_dir = Path(ALL_FIELDS[main_dir])
+        glob_name = None
+    else:
+        glob_name = main_dir
+        main_dir = GLOBAL_NAME_ONLY[main_dir]
     mode = args.mode
     workers = args.workers
 
@@ -255,7 +269,7 @@ def main():
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
-            master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+            master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
 
 if __name__ == "__main__":
     main()
