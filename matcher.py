@@ -302,7 +302,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
 
 def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
         """Run STILTS crossmatch between N catalogs."""
-        logger.info(f"Crossmatching catalogs: {path_dictionary.values}")
+        logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
         
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
             temp_output = Path(tmp_file.name)
@@ -620,3 +620,6 @@ def create_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
 
     # Save catalogue
     matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue.parquet"), index = False)
+
+def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir):
+    pass

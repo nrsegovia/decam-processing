@@ -90,7 +90,22 @@ def parse_mode(value):
         return value
     else:
         raise argparse.ArgumentTypeError(f"Invalid mode: '{value}'. Expected one of {valid_modes}.")
+    
+def parse_input(value):
+    if Path(value).exists():
+        return value
+    else:
+        raise argparse.ArgumentTypeError(f"Invalid input: '{value}'. Expected path to existing file.")
 
+def parse_radius(value):
+    try:
+        output = float(value)
+        if (output <= 60.0) & (output > 0.0):
+            return output
+        else:
+            raise Exception("Value out of bounds [0-60.0]")
+    except Exception as e:
+        raise argparse.ArgumentTypeError(f"Invalid input: '{value}' due to {e}. Expected radius (<60) in arcseconds.")
 
 # MODE INITIALIZATION FUNCTIONS
 
@@ -204,6 +219,34 @@ def main():
     )
 
     parser.add_argument(
+        '--inputcat', 
+        type=parse_input, 
+        default=None,
+        help='Input catalog to use for lightcurve extraction'
+    )
+
+    parser.add_argument(
+        '--ra', 
+        type=str, 
+        default="RA",
+        help='RA column (degrees) from input catalog'
+    )
+
+    parser.add_argument(
+        '--dec', 
+        type=str, 
+        default="Dec",
+        help='Dec column (degrees) from input catalog'
+    )
+
+    parser.add_argument(
+        '--radius', 
+        type=parse_radius, 
+        default=1.0,
+        help='Croossmatch radius for lightcurve extraction.'
+    )
+
+    parser.add_argument(
         '--ccds', 
         type=parse_ccds,
         required=True,
@@ -236,6 +279,10 @@ def main():
         glob_name = main_dir
         main_dir = GLOBAL_NAME_ONLY[main_dir]
     mode = args.mode
+    input_path = args.inputcat
+    input_ra = args.ra
+    input_dec = args.dec
+
     workers = args.workers
 
     # Initialize logging
