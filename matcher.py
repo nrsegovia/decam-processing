@@ -599,7 +599,7 @@ def create_ccd_master_catalog(logger, field_path, ccd):
 
 def create_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Assumes that ccd master catalogs have been created, no other option.
-    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in range(len(field_paths))}
+    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.master.catalogue.parquet") for x in range(len(field_paths))}
     matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
     # Create and save CCD edges
     json_file = Path(out_dir, "fields_info.json")
