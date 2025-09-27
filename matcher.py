@@ -364,7 +364,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             ra_cols = []
             dec_cols = []
             cmd = [
-                'java', '-Xms8G', '-Xmx64G',
+                'java', '-Xms8G', '-Xmx96G',
                 '-jar', STILTS,
                 '-stilts', '-disk', 'tmatchn']
             for index, key in enumerate(path_dictionary.keys(), start=1):
@@ -379,7 +379,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 f'nin={len(path_dictionary)}',
                 'matcher=sky',
                 'multimode=pairs',
-                f"params={CROSSMATCH['radius_matchn']}",
+                f"params=1",
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
