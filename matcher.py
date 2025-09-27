@@ -366,7 +366,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             cmd = [
                 'java', '-Xms8G', '-Xmx64G',
                 '-jar', STILTS,
-                '-stilts', , '-disk', 'tmatchn']
+                '-stilts', '-disk', 'tmatchn']
             for index, key in enumerate(path_dictionary.keys(), start=1):
                 ra_cols.append(f"RA_{key}")
                 dec_cols.append(f"Dec_{key}")
