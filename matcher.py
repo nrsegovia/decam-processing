@@ -355,48 +355,110 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
 
 def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
         """Run STILTS crossmatch between N catalogs."""
-        logger.info(f"Crossmatching catalogs: {path_dictionary.values}")
+        logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
         
-        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-            temp_output = Path(tmp_file.name)
+        keys = list(path_dictionary.keys())
+        temp_files = []
         
         try:
-            ra_cols = []
-            dec_cols = []
+            # First match: catalogue 1 with catalogue 2
+            logger.info(f"Progressive match 1/{len(keys)-1}: {keys[0]} with {keys[1]}")
+            
+            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
+                current_result = Path(tmp.name)
+            temp_files.append(current_result)
+            
             cmd = [
                 'java', '-Xms8G', '-Xmx96G',
                 '-jar', STILTS,
-                '-stilts', '-disk', 'tmatchn']
-            for index, key in enumerate(path_dictionary.keys(), start=1):
-                ra_cols.append(f"RA_{key}")
-                dec_cols.append(f"Dec_{key}")
-                cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
-                        f"values{index}=RA Dec", f"join{index}=always",
-                        f"icmd{index}=keepcols '$3 $6 $9 $12 $13 $14'",
-                        f"suffix{index}=_{key}"]
-
-            cmd += ["fixcols=all",
-                f'nin={len(path_dictionary)}',
+                '-stilts', '-disk', 'tmatch2',
+                f'in1={path_dictionary[keys[0]]}', 'ifmt1=parquet',
+                f'in2={path_dictionary[keys[1]]}', 'ifmt2=parquet',
+                'values1=RA Dec',
+                'values2=RA Dec',
                 'matcher=sky',
-                'multimode=pairs',
-                f"params=1",
-                'omode=out',
-                f'out={temp_output}', 'ofmt=parquet'
+                f'params=0.5', # Fixed for now, could make it user-defined
+                'join=1or2',
+                'find=best',
+                f"icmd1=keepcols '$3 $6 $9 $12 $13 $14'",
+                f"icmd2=keepcols '$3 $6 $9 $12 $13 $14'",
+                f'suffix1=_{keys[0]}',
+                f'suffix2=_{keys[1]}',
+                'fixcols=all',
+                f'out={current_result}',
+                'ofmt=parquet'
             ]
             
-            logger.info(f"Running STILTS command...")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            df_temp = pd.read_parquet(current_result)
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            # Coalesce: use cat1 coordinates if available, otherwise cat2
+            df_temp['RA_working'] = df_temp[f'RA_{keys[0]}'].fillna(df_temp[f'RA_{keys[1]}'])
+            df_temp['Dec_working'] = df_temp[f'Dec_{keys[0]}'].fillna(df_temp[f'Dec_{keys[1]}'])
             
-            df = pd.read_parquet(temp_output)
-            # Create single sky coordinates based on average
-            df['RA'] = df[ra_cols].mean(axis=1)
-            df['Dec'] = df[dec_cols].mean(axis=1)
+            # Save back with working coordinates
+            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
+                updated_result = Path(tmp.name)
+            temp_files.append(updated_result)
+            df_temp.to_parquet(updated_result, index=False)
+            current_result = updated_result
+            
+            # Progressive matches: add each subsequent catalogue
+            for i, key in enumerate(keys[2:], start=2):
+                logger.info(f"Progressive match {i}/{len(keys)-1}: adding {key}")
+                
+                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
+                    next_result = Path(tmp.name)
+                temp_files.append(next_result)
+                
+                cmd = [
+                    'java', '-Xms8G', '-Xmx96G',
+                    '-jar', STILTS,
+                    '-stilts', '-disk', 'tmatch2',
+                    f'in1={current_result}', 'ifmt1=parquet',
+                    f'in2={path_dictionary[key]}', 'ifmt2=parquet',
+                    f'values1=RA_{keys[0]} Dec_{keys[0]}',  # Use RA/Dec from first catalogue
+                    'values2=RA Dec',
+                    'matcher=sky',
+                    f'params=0.5',
+                    'join=1or2',
+                    'find=best',
+                    f"icmd2=keepcols '$3 $6 $9 $12 $13 $14'",
+                    f'suffix2=_{key}',
+                    'fixcols=all',
+                    f'out={next_result}',
+                    'ofmt=parquet'
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                df_temp = pd.read_parquet(next_result)
+                
+                # Update working coords: use existing if available, otherwise new catalogue
+                df_temp['RA_working'] = df_temp['RA_working'].fillna(df_temp[f'RA_{key}'])
+                df_temp['Dec_working'] = df_temp['Dec_working'].fillna(df_temp[f'Dec_{key}'])
+                
+                # Save updated version
+                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
+                    updated_result = Path(tmp.name)
+                temp_files.append(updated_result)
+                df_temp.to_parquet(updated_result, index=False)
+                current_result = updated_result
+            
+            # Read final result
+            df = pd.read_parquet(current_result)
+            
+            # Create averaged sky coordinates
+            ra_cols = [f"RA_{k}" for k in keys]
+            dec_cols = [f"Dec_{k}" for k in keys]
+            
+            # Only average columns that exist (handle non-matches)
+            existing_ra_cols = [col for col in ra_cols if col in df.columns]
+            existing_dec_cols = [col for col in dec_cols if col in df.columns]
+            
+            df['RA'] = df[existing_ra_cols].mean(axis=1)
+            df['Dec'] = df[existing_dec_cols].mean(axis=1)
+            df = df.drop(columns=['RA_working', 'Dec_working'])
             
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
@@ -406,10 +468,66 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             logger.error(f"STILTS command failed: {e.stderr}")
             raise
         finally:
-            try:
-                temp_output.unlink()
-            except:
-                pass
+            # Clean up all temporary files
+            for tmp_file in temp_files:
+                try:
+                    tmp_file.unlink()
+                except:
+                    pass
+
+        # with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+        #     temp_output = Path(tmp_file.name)
+        
+        # try:
+        #     ra_cols = []
+        #     dec_cols = []
+        #     cmd = [
+        #         'java', '-Xms8G', '-Xmx96G',
+        #         '-jar', STILTS,
+        #         '-stilts', '-disk', 'tmatchn']
+        #     for index, key in enumerate(path_dictionary.keys(), start=1):
+        #         ra_cols.append(f"RA_{key}")
+        #         dec_cols.append(f"Dec_{key}")
+        #         cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
+        #                 f"values{index}=RA Dec", f"join{index}=always",
+        #                 f"icmd{index}=keepcols '$3 $6 $9 $12 $13 $14'",
+        #                 f"suffix{index}=_{key}"]
+
+        #     cmd += ["fixcols=all",
+        #         f'nin={len(path_dictionary)}',
+        #         'matcher=sky',
+        #         'multimode=pairs',
+        #         f"params=1",
+        #         'omode=out',
+        #         f'out={temp_output}', 'ofmt=parquet'
+        #     ]
+            
+        #     logger.info(f"Running STILTS command...")
+            
+        #     result = subprocess.run(
+        #         cmd,
+        #         capture_output=True,
+        #         text=True,
+        #         check=True
+        #     )
+            
+        #     df = pd.read_parquet(temp_output)
+        #     # Create single sky coordinates based on average
+        #     df['RA'] = df[ra_cols].mean(axis=1)
+        #     df['Dec'] = df[dec_cols].mean(axis=1)
+            
+        #     logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
+            
+        #     return df
+            
+        # except subprocess.CalledProcessError as e:
+        #     logger.error(f"STILTS command failed: {e.stderr}")
+        #     raise
+        # finally:
+        #     try:
+        #         temp_output.unlink()
+        #     except:
+        #         pass
 
 
 def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys : str = "GroupID", do_centroids: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
