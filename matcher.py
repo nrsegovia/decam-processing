@@ -418,7 +418,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                     '-stilts', '-disk', 'tmatch2',
                     f'in1={current_result}', 'ifmt1=parquet',
                     f'in2={path_dictionary[key]}', 'ifmt2=parquet',
-                    f'values1=RA_{keys[0]} Dec_{keys[0]}',  # Use RA/Dec from first catalogue
+                    f'values1=RA_working Dec_working',  # Use working RA/Dec
                     'values2=RA Dec',
                     'matcher=sky',
                     f'params=0.5',
@@ -433,7 +433,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 
                 result = subprocess.run(cmd, capture_output=True, text=True, check=True)
                 df_temp = pd.read_parquet(next_result)
-                
+                logger.info(str(df_temp.columns))
                 # Update working coords: use existing if available, otherwise new catalogue
                 df_temp['RA_working'] = df_temp['RA_working'].fillna(df_temp[f'RA_{key}'])
                 df_temp['Dec_working'] = df_temp['Dec_working'].fillna(df_temp[f'Dec_{key}'])
