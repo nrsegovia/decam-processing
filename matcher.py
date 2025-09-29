@@ -314,7 +314,7 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             for index, key in enumerate(path_dictionary.keys(), start=1):
                 cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
                         f"values{index}=RA Dec", f"join{index}=always",
-                        f"icmd{index}=keepcols '$3 $4 $6'",
+                        f"icmd{index}=keepcols '$3 $4 $6 $8'",
                         f"suffix{index}=_{key}"]
 
             cmd += ["fixcols=all",
@@ -694,7 +694,8 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
                             output_file = Path(field_path, ccd, f"{ccd}.{bands[out_idx]}.catalogue.parquet")
                             batch_path = Path(field_path, ccd, "batches")
                             batch_path.mkdir(parents=True, exist_ok=True)
-
+                            # Add column with total number of members per group
+                            result_df['group_members'] = result_df.groupby('GroupID')['count'].transform('sum')
                             result_df.to_parquet(output_file, index = False)
                             for batch_info in batch_dfs:
                                 batch_df, batch_num = batch_info
