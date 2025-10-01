@@ -315,7 +315,7 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $
             for index, key in enumerate(these_keys, start=1):
                 cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
                         f"values{index}=RA Dec", f"join{index}=always",
-                        f"icmd{index}=keepcols {keepcols}",
+                        f"icmd{index}=keepcols '{keepcols}'",
                         f"suffix{index}=_{key}"]
 
             cmd += ["fixcols=all",
