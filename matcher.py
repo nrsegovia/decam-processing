@@ -712,7 +712,7 @@ def create_ccd_band_field_master_catalog(logger, field_path, ccd, bands):
 
 def create_ccd_band_master_catalog(logger, band, field_paths, ccd, out_dir):
     # Assumes that ccd master catalogs have been created, no other option.
-    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.catalogue.parquet") for x in range(len(field_paths))}
+    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.{band}.catalogue.parquet") for x in range(len(field_paths))}
     matched = stilts_crossmatch_N(logger, paths_to_master_cats)
     matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
