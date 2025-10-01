@@ -300,7 +300,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
             except:
                 pass
 
-def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
+def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $6 $8') -> pd.DataFrame:
         """Run STILTS crossmatch between N catalogs."""
         logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
         
@@ -308,13 +308,14 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             temp_output = Path(tmp_file.name)
         
         try:
+            these_keys = list(path_dictionary.keys())
             cmd = [
                 'java', '-jar', STILTS,
                 '-stilts', 'tmatchn']
-            for index, key in enumerate(path_dictionary.keys(), start=1):
+            for index, key in enumerate(these_keys, start=1):
                 cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
                         f"values{index}=RA Dec", f"join{index}=always",
-                        f"icmd{index}=keepcols '$3 $4 $6 $8'",
+                        f"icmd{index}=keepcols {keepcols}",
                         f"suffix{index}=_{key}"]
 
             cmd += ["fixcols=all",
@@ -337,8 +338,8 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             
             df = pd.read_parquet(temp_output)
             # Create single sky coordinates based on wavelength importance (blue > red)
-            df['RA'] = df[[f"RA_{x}" for x in "griz"]].bfill(axis=1).iloc[:, 0]
-            df['Dec'] = df[[f"Dec_{x}" for x in "griz"]].bfill(axis=1).iloc[:, 0]
+            df['RA'] = df[[f"RA_{x}" for x in these_keys]].bfill(axis=1).iloc[:, 0]
+            df['Dec'] = df[[f"Dec_{x}" for x in these_keys]].bfill(axis=1).iloc[:, 0]
             
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
@@ -669,7 +670,7 @@ def match_list_of_files(logger, paths, idx):
         except:
             return None, None, None
 
-def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
+def create_ccd_band_field_master_catalog(logger, field_path, ccd, bands):
     subdirs = [Path(field_path, ccd, band) for band in bands]
     problems = [not(x.is_dir()) for x in subdirs]
     any_problem = any(problems)
@@ -709,12 +710,17 @@ def create_ccd_band_master_catalog(logger, field_path, ccd, bands):
         except Exception as e:
             logger.error(f"Failed to process directory {subdir.name}: {e}")
 
+def create_ccd_band_master_catalog(logger, band, field_paths, ccd, out_dir):
+    # Assumes that ccd master catalogs have been created, no other option.
+    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.catalogue.parquet") for x in range(len(field_paths))}
+    matched = stilts_crossmatch_N(logger, paths_to_master_cats)
+    matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
 def create_ccd_master_catalog(logger, field_path, ccd):
     # Assumes that griz catalogs have been created, no other option.
     paths = {x : Path(field_path, str(ccd), f"{ccd}.{x}.catalogue.parquet") for x in "griz"}
     matched = stilts_crossmatch_N(logger, paths)
-
+# Agregar json aquí, debe reemplazarse field_path por glob_name...
     matched.to_parquet(Path(field_path, str(ccd), f"{ccd}.master.catalogue.parquet"), index = False)
 
 def create_master_catalog(logger, glob_name, field_paths, ccd, out_dir):

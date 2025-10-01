@@ -152,7 +152,7 @@ def dcmp_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, w
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
 
-def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
+def catalog_per_ccd_band_field_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
     """Run batch processing on given field-ccd-band(s) configuration."""
     if single_ccd:
         these_ccds = [ccds]
@@ -162,7 +162,25 @@ def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, wo
     for number_ccd in these_ccds:
         current_ccd = str(number_ccd)
         logger.info(f"Working on CCD {current_ccd}.")
-        create_ccd_band_master_catalog(logger, main_dir, current_ccd, bands)
+        create_ccd_band_field_master_catalog(logger, main_dir, current_ccd, bands)
+    logger.info("Batch processing completed!")
+
+def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
+    """Run batch processing on given ccd-band(s) configuration."""
+    out_dir = Path(local, "output")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if single_ccd:
+        these_ccds = [ccds]
+    else:
+        these_ccds = ccds
+    # Process each subdirectory
+    for number_ccd in these_ccds:
+        current_ccd = str(number_ccd)
+        logger.info(f"Working on CCD {current_ccd}.")
+        for band in bands:
+            logger.info(f"Started band {band}.")
+            create_ccd_band_master_catalog(logger, band, main_dir, current_ccd, out_dir)
+
     logger.info("Batch processing completed!")
 
 def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
@@ -302,11 +320,17 @@ def main():
             dcmp_to_parquet_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
         else:
             logger.error("This mode is only available for single directories, not global ones. Aborting.")
-    elif mode == "CATALOG_PER_CCD_BAND":
+    elif mode == "CATALOG_PER_CCD_BAND_FIELD":
         if path_only:
-            catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+            catalog_per_ccd_band_field_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
         else:
             logger.error("This mode is only available for single directories, not global ones. Aborting.")
+
+    elif mode == "CATALOG_PER_CCD_BAND":
+        if path_only:
+            logger.error("This mode is only available for global directories, not single ones. Aborting.")
+        else:
+            catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
     elif mode == "MASTER_CATALOG_CCD":
         if path_only:
             master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
