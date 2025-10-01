@@ -714,7 +714,9 @@ def create_ccd_band_master_catalog(logger, band, field_paths, ccd, out_dir):
     # Assumes that ccd master catalogs have been created, no other option.
     paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.{band}.catalogue.parquet") for x in range(len(field_paths))}
     matched = stilts_crossmatch_N(logger, paths_to_master_cats)
-    matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.{band}.master.catalogue.parquet"), index = False)
+    save_dir = Path(out_dir, str(ccd))
+    save_dir.mkdir(parents=True, exist_ok=True)
+    matched.to_parquet(Path(save_dir, f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
 def create_ccd_master_catalog(logger, field_path, ccd):
     # Assumes that griz catalogs have been created, no other option.

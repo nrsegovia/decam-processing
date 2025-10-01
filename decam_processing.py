@@ -168,7 +168,6 @@ def catalog_per_ccd_band_field_mode(main_dir, ccds, single_ccd, bands, single_ba
 def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
     """Run batch processing on given ccd-band(s) configuration."""
     out_dir = Path(local, "output")
-    out_dir.mkdir(parents=True, exist_ok=True)
     if single_ccd:
         these_ccds = [ccds]
     else:
