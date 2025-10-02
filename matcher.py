@@ -716,18 +716,12 @@ def create_ccd_band_master_catalog(logger, band, field_paths, ccd, out_dir):
     matched = stilts_crossmatch_N(logger, paths_to_master_cats)
     save_dir = Path(out_dir, str(ccd))
     save_dir.mkdir(parents=True, exist_ok=True)
+    matched['ID'] = band + (matched.index + 1).astype(str)
     matched.to_parquet(Path(save_dir, f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
-def create_ccd_master_catalog(logger, field_path, ccd):
-    # Assumes that griz catalogs have been created, no other option.
-    paths = {x : Path(field_path, str(ccd), f"{ccd}.{x}.catalogue.parquet") for x in "griz"}
-    matched = stilts_crossmatch_N(logger, paths)
-# Agregar json aquí, debe reemplazarse field_path por glob_name...
-    matched.to_parquet(Path(field_path, str(ccd), f"{ccd}.master.catalogue.parquet"), index = False)
-
-def create_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
+def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Assumes that ccd master catalogs have been created, no other option.
-    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.master.catalogue.parquet") for x in range(len(field_paths))}
+    paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
     matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
     # Create and save CCD edges
     json_file = Path(out_dir, "fields_info.json")

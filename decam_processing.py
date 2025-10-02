@@ -165,9 +165,9 @@ def catalog_per_ccd_band_field_mode(main_dir, ccds, single_ccd, bands, single_ba
         create_ccd_band_field_master_catalog(logger, main_dir, current_ccd, bands)
     logger.info("Batch processing completed!")
 
-def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
+def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger):
     """Run batch processing on given ccd-band(s) configuration."""
-    out_dir = Path(local, "output")
+    out_dir = Path(local, "output", glob_name)
     if single_ccd:
         these_ccds = [ccds]
     else:
@@ -182,27 +182,16 @@ def catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, wo
 
     logger.info("Batch processing completed!")
 
-def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger):
-    logger.info(f"Started creation of master catalog(s) for CCD(s): {ccds}")
-    if single_ccd:
-        create_ccd_master_catalog(logger, main_dir, ccds)
-        logger.info(f"CCD {ccds} done.")
-    else:
-        for ccd in ccds:
-            create_ccd_master_catalog(logger, main_dir, ccd)
-            logger.info(f"CCD {ccd} done.")
-    logger.info(f"Master catalog for CCD process has finished.")
-
-def master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger):
+def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger):
     logger.info(f"Started creation of final master catalog(s) for CCD(s): {ccds}")
-    out_dir = Path(local, "output")
+    out_dir = Path(local, "output", glob_name)
     out_dir.mkdir(parents=True, exist_ok=True)
     if single_ccd:
-        create_master_catalog(logger, glob_name, main_dir, ccds, out_dir)
+        create_ccd_master_catalog(logger, glob_name, main_dir, ccds, out_dir)
         logger.info(f"CCD {ccds} done.")
     else:
         for ccd in ccds:
-            create_master_catalog(logger, glob_name, main_dir, ccd, out_dir)
+            create_ccd_master_catalog(logger, glob_name, main_dir, ccd, out_dir)
             logger.info(f"CCD {ccd} done.")
     logger.info(f"Final master catalog for CCD process has finished.")
 
@@ -329,17 +318,12 @@ def main():
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
-            catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
+            catalog_per_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
     elif mode == "MASTER_CATALOG_CCD":
-        if path_only:
-            master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, logger)
-        else:
-            logger.error("This mode is only available for single directories, not global ones. Aborting.")
-    elif mode == "MASTER_CATALOG":
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
-            master_catalog_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
+            master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
 
 if __name__ == "__main__":
     main()
