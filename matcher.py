@@ -429,8 +429,6 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                     'join=1or2',
                     'find=best',
                     f"icmd2=addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'",
-                    f'suffix2=_{key}',
-                    'fixcols=all',
                     f'out={next_result}',
                     'ofmt=parquet'
                 ]
@@ -439,6 +437,11 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 df_temp = pd.read_parquet(next_result)
                 logger.info(str(df_temp.columns))
                 # Update working coords: use existing if available, otherwise new catalogue
+                df_temp.rename(columns={"RA" : f"RA_{key}",
+                                        "Dec" : f"Dec_{key}",
+                                        "ID" : f"ID_{key}",
+                                        "nobs" : f"nobs_{key}"},
+                               inplace=True)
                 df_temp['RA_working'] = df_temp['RA_working'].fillna(df_temp[f'RA_{key}'])
                 df_temp['Dec_working'] = df_temp['Dec_working'].fillna(df_temp[f'Dec_{key}'])
                 
