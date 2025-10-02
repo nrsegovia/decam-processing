@@ -381,8 +381,10 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 f'params=0.5', # Fixed for now, could make it user-defined
                 'join=1or2',
                 'find=best',
-                f"icmd1= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
-                f"icmd2= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
+                # f"icmd1= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
+                # f"icmd2= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
+                f"icmd1= addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'", # Probably must generalize this to any number of subsets...
+                f"icmd2= addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'",
                 f'suffix1=_{keys[0]}',
                 f'suffix2=_{keys[1]}',
                 'fixcols=all',
@@ -425,7 +427,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                     f'params=0.5',
                     'join=1or2',
                     'find=best',
-                    f"icmd2=assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
+                    f"icmd2=addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'",
                     f'suffix2=_{key}',
                     'fixcols=all',
                     f'out={next_result}',
@@ -460,6 +462,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             df['RA'] = df[existing_ra_cols].mean(axis=1)
             df['Dec'] = df[existing_dec_cols].mean(axis=1)
             df = df.drop(columns=['RA_working', 'Dec_working'])
+            df['ID'] = df.index + 1
             
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
@@ -724,7 +727,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
     matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
     # Create and save CCD edges
-    json_file = Path(out_dir, "fields_info.json")
+    json_file = Path(out_dir, '..', "fields_info.json")
     if json_file.exists():
         with open(json_file, 'r') as f:
             json_data = json.load(f)
