@@ -378,7 +378,8 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 'values1=RA Dec',
                 'values2=RA Dec',
                 'matcher=sky',
-                f'params=0.5', # Fixed for now, could make it user-defined
+                f'params=1', # Fixed for now, could make it user-defined
+                'tuning=18',
                 'join=1or2',
                 'find=best',
                 # f"icmd1= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
