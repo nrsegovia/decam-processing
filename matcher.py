@@ -370,7 +370,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
             temp_files.append(current_result)
             
             cmd = [
-                'java', '-Xms8G', '-Xmx96G',
+                'java', '-Xms8G', '-Xmx192G',
                 '-jar', STILTS,
                 '-stilts', '-disk', 'tmatch2',
                 f'in1={path_dictionary[keys[0]]}', 'ifmt1=parquet',
@@ -417,7 +417,7 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 temp_files.append(next_result)
                 
                 cmd = [
-                    'java', '-Xms8G', '-Xmx96G',
+                    'java', '-Xms8G', '-Xmx192G',
                     '-jar', STILTS,
                     '-stilts', '-disk', 'tmatch2',
                     f'in1={current_result}', 'ifmt1=parquet',
