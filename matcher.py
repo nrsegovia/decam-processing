@@ -743,7 +743,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
 
 def retrieve_cols_from_batches(band, bandid, field_paths, ccd, glob_name, out_dir):
-    band_master = Path(out_dir, glob_name, ccd, f"{ccd}.{band}.master.catalogue.parquet")
+    band_master = Path(out_dir, ccd, f"{ccd}.{band}.master.catalogue.parquet")
     # Retrieve relevant row and free memory
     df_master = pd.read_parquet(band_master)
     master_row = df_master.loc[df_master['ID'] == bandid].iloc[0].copy()
