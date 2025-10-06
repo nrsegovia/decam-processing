@@ -215,11 +215,12 @@ def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius
     if json_file.exists():
         with open(json_file, 'r') as f:
             json_data = json.load(f)
-        for stored_ccd in json_data[glob_name]:
-            this_ra_min = stored_ccd["RA"][0]
-            this_ra_max = stored_ccd["RA"][1]
-            this_dec_min = stored_ccd["Dec"][0]
-            this_dec_max = stored_ccd["Dec"][1]
+        current_field = json_data[glob_name]
+        for stored_ccd in current_field.keys():
+            this_ra_min = current_field[stored_ccd]["RA"][0]
+            this_ra_max = current_field[stored_ccd]["RA"][1]
+            this_dec_min = current_field[stored_ccd]["Dec"][0]
+            this_dec_max = current_field[stored_ccd]["Dec"][1]
             mask = check_points_in_rectangle(input_cat,input_ra,input_dec,this_ra_min, this_ra_max, this_dec_min, this_dec_max)
             if any(mask):
                 found_ccds.append([stored_ccd, mask])
