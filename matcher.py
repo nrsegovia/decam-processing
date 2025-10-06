@@ -581,7 +581,7 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
             cmd = [
                 'java', '-jar', STILTS,
                 '-stilts', 'tmatch2',
-                f"in1={in_path}",
+                f"in1={in_path}", 'ifmt1=parquet',
                 f"in2={master_path}", 'ifmt2=parquet',
                 'matcher=sky',
                 f"values1={inra} {indec}",
@@ -755,8 +755,13 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     Path(df_file).unlink()
 
     total_matched = len(matches)
-    print(matches.columns)
-    exit()
+    new_cols = matches.columns.to_list()
+    # Default output is ['ID_1', 'Type', 'Subtype', 'RA_1', 'Dec_1', 'I', 'V', 'V_I', 'P_1',
+    #    'REMARKS', 'RA_g', 'Dec_g', 'ID_g', 'nobs_g', 'RA_r', 'Dec_r', 'ID_r',
+    #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
+    #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
+    #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
+
     if total_matched > 0:
         logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
         timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
@@ -765,7 +770,15 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
         logger.info(f"Catalogue created at {cat_path}")
         # Collect matches
         for match in matches.itertuples():
-            pass
+            # Start by checking which bands have matches
+            band_keys = "griz"
+            output_dict = {}
+            current_id = match.ID
+            for band in band_keys:
+                band_id = getattr(match, band)
+                # Using this ID, go to the relevant band master catalogue
+                # Then extract the relevant rows from the batches...
+                # Should create individual files for each source later on
     else:
         logger.info("No matches found. No curves have been extracted.")
     # Check whether matches is empty
