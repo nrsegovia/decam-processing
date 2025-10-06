@@ -742,6 +742,47 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Save catalogue
     matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
 
+def retrieve_cols_from_batches(band, bandid, field_paths, ccd, glob_name, out_dir):
+    band_master = Path(out_dir, glob_name, ccd, f"{ccd}.{band}.master.catalogue.parquet")
+    # Retrieve relevant row and free memory
+    df_master = pd.read_parquet(band_master)
+    master_row = df_master.loc[df_master['ID'] == bandid].iloc[0].copy()
+    del df_master
+    # The following assumes that the number of directories in GLOBAL_NAME_ONLY
+    # matches the number of RA_ Dec_ pairs in the df_master catalogue
+    total_dirs = len(field_paths)
+    out_df = []
+    paths_to_use = [Path(x, str(ccd)) for x in field_paths]
+    for idx, p in enumerate(paths_to_use):
+        # Into each set of reductions
+        this_group_id = master_row[f"GroupID_{idx}"]
+        check_na = pd.isna(this_group_id) # True is na
+        if check_na:
+            pass
+        else:
+            # Into reduction batches
+            df_batches = pd.read_parquet(Path(p, f"{ccd}.{band}.catalogue.parquet"))
+            sub_df = df_batches.loc[df_batches['GroupID'] == this_group_id]
+            batches = sub_df.batch.values
+            ids = sub_df.GroupID_batch.values
+            del df_batches
+            # Create dictionary in case more than a single ID corresponds to a given batch
+            batches_unified = {}
+            for idx, batch in enumerate(batches):
+                batches_unified[batch] = batches_unified.get(batch, []) + [ids[idx]]
+            # Now operate on each batch once
+            for batch_key in batches_unified.keys():
+                this_batch = pd.read_parquet(Path(p, "batches", f"{band}.{batch_key}.parquet"))
+                ids_to_look_for = batches_unified[batch_key]
+                for current_batch_id in ids_to_look_for:
+                    out_df.append(this_batch[this_batch.GroupID == current_batch_id])
+    out_df = pd.concat(out_df)
+    out_df["Band"] = band
+    print(out_df.columns)
+    exit()
+
+    return out_df
+
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
     master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
     # Create to_match_cat from df
@@ -772,13 +813,17 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
         for match in matches.itertuples():
             # Start by checking which bands have matches
             band_keys = "griz"
-            output_dict = {}
+            output = []
             current_id = match.ID
             for band in band_keys:
                 band_id = getattr(match, band)
-                # Using this ID, go to the relevant band master catalogue
-                # Then extract the relevant rows from the batches...
-                # Should create individual files for each source later on
+                if pd.isna(band_id):
+                    # Nothing to do here
+                    pass
+                else:
+                    output.append(retrieve_cols_from_batches(band, band_id, field_paths, ccd, glob_name, out_dir))
+            df_to_store = pd.DataFrame(output)
+            df_to_store.to_csv(Path(save_dir, f"{ccd}.{current_id}"), index = False)
     else:
         logger.info("No matches found. No curves have been extracted.")
     # Check whether matches is empty
