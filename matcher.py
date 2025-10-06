@@ -771,6 +771,7 @@ def retrieve_cols_from_batches(band, bandid, field_paths, ccd, glob_name, out_di
             for idx, batch in enumerate(batches):
                 batches_unified[batch] = batches_unified.get(batch, []) + [ids[idx]]
             # Now operate on each batch once
+            # Could benefit from multi-processing
             for batch_key in batches_unified.keys():
                 this_batch = pd.read_parquet(Path(p, "batches", f"{band}.{batch_key}.parquet"))
                 ids_to_look_for = batches_unified[batch_key]
@@ -802,6 +803,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
     #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
     #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
+    id_col = "ID_2" if "ID_2" in new_cols else "ID"
 
     if total_matched > 0:
         logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
@@ -814,9 +816,9 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
             # Start by checking which bands have matches
             band_keys = "griz"
             output = []
-            current_id = match.ID
+            current_id = getattr(match, id_col)
             for band in band_keys:
-                band_id = getattr(match, band)
+                band_id = getattr(match, f"ID_{band}")
                 if pd.isna(band_id):
                     # Nothing to do here
                     pass
