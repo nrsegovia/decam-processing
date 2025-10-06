@@ -11,6 +11,7 @@ import concurrent.futures
 # import pyarrow
 from typing import Tuple
 import json
+from datetime import datetime
 
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
@@ -483,60 +484,6 @@ def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
                 except:
                     pass
 
-        # with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-        #     temp_output = Path(tmp_file.name)
-        
-        # try:
-        #     ra_cols = []
-        #     dec_cols = []
-        #     cmd = [
-        #         'java', '-Xms8G', '-Xmx96G',
-        #         '-jar', STILTS,
-        #         '-stilts', '-disk', 'tmatchn']
-        #     for index, key in enumerate(path_dictionary.keys(), start=1):
-        #         ra_cols.append(f"RA_{key}")
-        #         dec_cols.append(f"Dec_{key}")
-        #         cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
-        #                 f"values{index}=RA Dec", f"join{index}=always",
-        #                 f"icmd{index}=keepcols '$3 $6 $9 $12 $13 $14'",
-        #                 f"suffix{index}=_{key}"]
-
-        #     cmd += ["fixcols=all",
-        #         f'nin={len(path_dictionary)}',
-        #         'matcher=sky',
-        #         'multimode=pairs',
-        #         f"params=1",
-        #         'omode=out',
-        #         f'out={temp_output}', 'ofmt=parquet'
-        #     ]
-            
-        #     logger.info(f"Running STILTS command...")
-            
-        #     result = subprocess.run(
-        #         cmd,
-        #         capture_output=True,
-        #         text=True,
-        #         check=True
-        #     )
-            
-        #     df = pd.read_parquet(temp_output)
-        #     # Create single sky coordinates based on average
-        #     df['RA'] = df[ra_cols].mean(axis=1)
-        #     df['Dec'] = df[dec_cols].mean(axis=1)
-            
-        #     logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
-            
-        #     return df
-            
-        # except subprocess.CalledProcessError as e:
-        #     logger.error(f"STILTS command failed: {e.stderr}")
-        #     raise
-        # finally:
-        #     try:
-        #         temp_output.unlink()
-        #     except:
-        #         pass
-
 
 def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys : str = "GroupID", do_centroids: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Run STILTS crossmatch between two catalogs."""
@@ -620,6 +567,51 @@ def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys 
                 temp_output2.unlink()
                 if do_centroids:
                     temp_output_centroid.unlink()
+            except:
+                pass
+
+def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, indec, match_radius) -> pd.DataFrame:
+        """Run STILTS crossmatch between two catalogs."""
+        logger.info(f"Crossmatching {in_path.name} with {master_path.name}")
+        
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+            temp_output = Path(tmp_file.name)
+        
+        try:
+            cmd = [
+                'java', '-jar', STILTS,
+                '-stilts', 'tmatch2',
+                f"in1={in_path}",
+                f"in2={master_path}", 'ifmt2=parquet',
+                'matcher=sky',
+                f"values1={inra} {indec}",
+                f"values2=RA Dec",
+                f"params={match_radius}",
+                f"join=1and2",
+                'omode=out',
+                f'out={temp_output}', 'ofmt=parquet'
+            ]
+            
+            logger.info(f"Running STILTS command...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            df = pd.read_parquet(temp_output)
+            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
+            
+            return df
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"STILTS command failed: {e.stderr}")
+            raise
+        finally:
+            try:
+                temp_output.unlink()
             except:
                 pass
 
@@ -750,5 +742,32 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Save catalogue
     matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
 
-def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir):
-    pass
+def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
+    master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
+    # Create to_match_cat from df
+    with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+        df_file = tmp_file.name
+    to_match_cat.to_parquet(df_file, index = False)
+    # The command below should probably be merged with stilts_crossmatch_pair
+    # But it requires some refactoring...
+    matches = stilts_crossmatch_external(logger, Path(df_file), master_cat, ra_str, dec_str, match_radius)
+    # Delete temp file
+    Path(df_file).unlink()
+
+    total_matched = len(matches)
+    print(matches.columns)
+    exit()
+    if total_matched > 0:
+        logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
+        timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
+        cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
+        matches.to_csv(cat_path, index=False)
+        logger.info(f"Catalogue created at {cat_path}")
+        # Collect matches
+        for match in matches.itertuples():
+            pass
+    else:
+        logger.info("No matches found. No curves have been extracted.")
+    # Check whether matches is empty
+    # If not empty, retrieve data from relevant places
+    

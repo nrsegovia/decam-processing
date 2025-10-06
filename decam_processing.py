@@ -96,6 +96,12 @@ def parse_input(value):
         return value
     else:
         raise argparse.ArgumentTypeError(f"Invalid input: '{value}'. Expected path to existing file.")
+    
+def parse_output(value):
+    if Path(value).is_dir():
+        return value
+    else:
+        raise argparse.ArgumentTypeError(f"Invalid input: '{value}'. Expected path to directory.")
 
 def parse_radius(value):
     try:
@@ -195,6 +201,39 @@ def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, work
             logger.info(f"CCD {ccd} done.")
     logger.info(f"Final master catalog for CCD process has finished.")
 
+def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius, save_dir, glob_name, logger):
+    logger.info(f"Started lightcurve extraction for input catalog: {input_catalogue}")
+    save_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(local, "output", glob_name)
+    try:
+        input_cat = pd.read_csv(input_catalogue)
+    except Exception as e:
+        logger.error(f"Problem found when loading file: {e}. Aborting.")
+    found_ccds = [] # Tuple storing CCD number and masked rows.
+    # CCD list must be created here using the json
+    json_file = Path(out_dir, '..', "fields_info.json")
+    if json_file.exists():
+        with open(json_file, 'r') as f:
+            json_data = json.load(f)
+        for stored_ccd in json_data[glob_name]:
+            this_ra_min = stored_ccd["RA"][0]
+            this_ra_max = stored_ccd["RA"][1]
+            this_dec_min = stored_ccd["Dec"][0]
+            this_dec_max = stored_ccd["Dec"][1]
+            mask = check_points_in_rectangle(input_cat,input_ra,input_dec,this_ra_min, this_ra_max, this_dec_min, this_dec_max)
+            if any(mask):
+                found_ccds.append([stored_ccd, mask])
+    else:
+        logger.error("JSON file defining fields not found. Aborting.")
+    if len(found_ccds) > 0:
+        for current_ccd, current_mask in found_ccds:
+            df_subset = input_cat[current_mask]
+            extract_light_curves(logger, glob_name, main_dir, current_ccd, out_dir, df_subset, input_ra, input_dec, input_radius, save_dir)
+            logger.info(f"CCD {current_ccd} done.")
+        logger.info(f"Lightcurve creation process has finished.")
+    else:
+        logger.info(f"No input catalogue sources were found in the data.")
+
 def main():
     # Create argument parser
     parser = argparse.ArgumentParser(
@@ -229,6 +268,13 @@ def main():
         type=parse_input, 
         default=None,
         help='Input catalog to use for lightcurve extraction'
+    )
+
+    parser.add_argument(
+        '--outdir', 
+        type=parse_output, 
+        default=Path(__file__, "output", "lightcurves"),
+        help='Output directory to use for lightcurve extraction'
     )
 
     parser.add_argument(
@@ -286,8 +332,10 @@ def main():
         main_dir = GLOBAL_NAME_ONLY[main_dir]
     mode = args.mode
     input_path = args.inputcat
+    output_dir = args.outdir
     input_ra = args.ra
     input_dec = args.dec
+    input_radius = args.ra
 
     workers = args.workers
 
@@ -324,6 +372,11 @@ def main():
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
             master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
+    elif mode == "LIGHTCURVE":
+        if path_only:
+            logger.error("This mode is only available for global directories, not single ones. Aborting.")
+        else:
+            lightcurve_mode(main_dir,input_path, input_ra, input_dec, input_radius, output_dir, glob_name, logger)
 
 if __name__ == "__main__":
     main()

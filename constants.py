@@ -41,7 +41,7 @@ MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old fi
          "CATALOG_PER_CCD_BAND_FIELD" : "Creates catalog of all sources observed in a given configuration of field subset-ccd-band(s). Uses STILTS, so the number of workers set here is irrelevant.",
          "CATALOG_PER_CCD_BAND" : "Creates catalog of all sources observed in a given configuration of field(global)-ccd-band(s). Uses STILTS, so the number of workers set here is irrelevant.",
          "MASTER_CATALOG_CCD" : "Creates single master catalog for each CCD in the provided range, using all four photometric bands (assumes that the corresponding per-band catalogues have been created).",
-         "LIGHTCURVE" : "Lightcurve extraction mode based on input catalog."}
+         "LIGHTCURVE" : "Lightcurve extraction mode based on input CSV catalog. Note that the CCD and band-related arguments are ignored in this case."}
 
 MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])
 

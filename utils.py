@@ -58,3 +58,10 @@ def get_from_header(file_path: Path, column: str):
     except Exception as e:
         value = None
     return value
+
+def check_points_in_rectangle(df, x_coord, y_coord, x_min, x_max, y_min, y_max):
+    """Check if points in DataFrame are inside rectangle"""
+    return (
+        (df[x_coord] >= x_min) & (df[x_coord] <= x_max) &
+        (df[y_coord] >= y_min) & (df[y_coord] <= y_max)
+    )
