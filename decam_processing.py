@@ -336,7 +336,7 @@ def main():
     output_dir = args.outdir
     input_ra = args.ra
     input_dec = args.dec
-    input_radius = args.ra
+    input_radius = args.radius
 
     workers = args.workers
 
