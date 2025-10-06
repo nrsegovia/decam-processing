@@ -779,8 +779,10 @@ def retrieve_cols_from_batches(band, bandid, field_paths, ccd, glob_name, out_di
                     out_df.append(this_batch[this_batch.GroupID == current_batch_id])
     out_df = pd.concat(out_df)
     out_df["Band"] = band
-    print(out_df.columns)
-    exit()
+    # print(out_df.columns)
+    # Index(['RA', 'Dec', 'M', 'dM', 'flux', 'dflux', 'type', 'MJD', 'GroupID',
+    #    'GroupSize', 'Band'],
+    #   dtype='object')
 
     return out_df
 
@@ -824,7 +826,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
                     pass
                 else:
                     output.append(retrieve_cols_from_batches(band, band_id, field_paths, ccd, glob_name, out_dir))
-            df_to_store = pd.DataFrame(output)
+            df_to_store = pd.concat(output)
             df_to_store.to_csv(Path(save_dir, f"{ccd}.{current_id}"), index = False)
     else:
         logger.info("No matches found. No curves have been extracted.")
