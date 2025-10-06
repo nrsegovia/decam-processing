@@ -273,7 +273,7 @@ def main():
     parser.add_argument(
         '--outdir', 
         type=parse_output, 
-        default=Path(__file__, "output", "lightcurves"),
+        default=Path(Path(__file__).parent, "output", "lightcurves"),
         help='Output directory to use for lightcurve extraction'
     )
 
