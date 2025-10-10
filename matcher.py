@@ -125,13 +125,14 @@ def match_list_of_files(logger, path_list, db, band):
                 nan_dec = matched["RA_1"].isna()
                 matched.loc[nan_dec, "Dec_1"] = matched.loc[nan_dec, "Dec_2"]
 
-                matched.rename(columns={"RA_1" : "RA", "Dec_1" : "Dec"})
+                matched.rename(columns={"RA_1" : "RA", "Dec_1" : "Dec"}, inplace=True)
+                # Dropping columns other than ID and coord
+                matched = matched[["ID", "RA", "Dec"]]
 
                 # New master cat temp file due to chache reasons
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
-                logger.info(str(matched.columns))
 
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
