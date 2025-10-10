@@ -16,7 +16,7 @@ from datetime import datetime
 import sqlite3
 
 def initialize_band_table(db, band):
-    db.conn.execute(f"""
+    db.execute(f"""
                 CREATE TABLE IF NOT EXISTS lightcurves_{band} (
                     ID TEXT NOT NULL,
                     MJD REAL NOT NULL,
@@ -32,17 +32,17 @@ def initialize_band_table(db, band):
             """)
             
     # Create indexes for fast queries
-    db.conn.execute(f"""
+    db.execute(f"""
                 CREATE INDEX IF NOT EXISTS idx_source 
                 ON lightcurves_{band}(ID)
             """)
             
-    db.conn.execute(f"""
+    db.execute(f"""
                 CREATE INDEX IF NOT EXISTS idx_mjd 
                 ON lightcurves_{band}(MJD)
             """)
             
-    db.conn.commit()
+    db.commit()
 
 def bulk_insert(db, df, band):
     """
@@ -56,7 +56,7 @@ def bulk_insert(db, df, band):
     """
     df.to_sql(f'lightcurves_{band}', db, if_exists='append', 
                 index=False, method='multi', chunksize=10000)
-    db.conn.commit()
+    db.commit()
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
 def match_list_of_files(logger, path_list, db, band):
