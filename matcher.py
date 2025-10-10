@@ -64,7 +64,7 @@ def match_list_of_files(logger, path_list, db, band):
     try:
         started = False
         master_cat = None
-        next_start_id = 0
+        next_start_id = 1
         prev_start_id = -1
         cols_to_drop = ["RA_1", "Dec_1", "RA_2", "Dec_2"]
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
