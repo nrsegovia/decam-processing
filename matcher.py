@@ -12,249 +12,132 @@ import concurrent.futures
 from typing import Tuple
 import json
 from datetime import datetime
+# It seems that using sqlalchemy instead would make the process faster?
+import sqlite3
 
+def initialize_band_table(db, band):
+    db.conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS lightcurves_{band} (
+                    ID TEXT NOT NULL,
+                    MJD REAL NOT NULL,
+                    M REAL,
+                    dM REAL,
+                    flux REAL,
+                    dflux REAL,
+                    type INTEGER,
+                    Separation REAL,
+
+                    PRIMARY KEY (ID, MJD)
+                )
+            """)
+            
+    # Create indexes for fast queries
+    db.conn.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_source 
+                ON lightcurves_{band}(ID)
+            """)
+            
+    db.conn.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_mjd 
+                ON lightcurves_{band}(MJD)
+            """)
+            
+    db.conn.commit()
+
+def bulk_insert(db, df, band):
+    """
+    Efficiently insert large batch of observations.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Must have columns: ID, MJD, M, dM, flux, dflux, 
+                            type, Separation
+    """
+    df.to_sql(f'lightcurves_{band}', db, if_exists='append', 
+                index=False, method='multi', chunksize=10000)
+    db.conn.commit()
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
-def compute_n_cols(type_col: pd.Series):
-
-    vals = type_col.values
-    eq1 = vals == 1
-    eq3 = vals == 3
-    na = np.isnan(vals)
-    n1 = np.where(eq1, 1, 0)
-    n3 = np.where(eq3, 1, 0)
-    nplus = np.where((~np.logical_or(eq1,eq3)) | na, 1, 0)
-
-    return [n1, n3, nplus]
-
-def post_process_first_crossmatch(logger, df: pd.DataFrame, zpt_one, zpt_two) -> pd.DataFrame:
-    """Post-process the first crossmatch between two catalogs."""
-    logger.info("Post-processing first crossmatch...")
-    
-    cols_to_avg = PROCESSING['columns_to_average']
-    error_cols = PROCESSING['error_columns']
-    type_col = PROCESSING['type_column']
-    
-    result_data = {}
-    
-    # Process type counts based on type_1 and type_2 columns
-    logger.debug("Computing initial type counts and adding zeropoints...")
-    
-    df["M_1"] = df["M_1"] + zpt_one
-    df["M_2"] = df["M_2"] + zpt_two
-
-    type_col_1 = f"{type_col}_1"
-    type_col_2 = f"{type_col}_2"
-
-    n1_1, n3_1, nplus_1 = compute_n_cols(df[type_col_1])
-    n1_2, n3_2, nplus_2 = compute_n_cols(df[type_col_2])
-
-    result_data['n1'] = n1_1 + n1_2
-    result_data['n3'] = n3_1 + n3_2
-    result_data['n+'] = nplus_1 + nplus_2
-    
-    # Compute n_total
-    result_data['n_total'] = result_data['n1'] + result_data['n3'] + result_data['n+']
-    
-    logger.debug(f"Initial counts - n1: {result_data['n1'].sum()}, n3: {result_data['n3'].sum()}, "
-                f"n+: {result_data['n+'].sum()}, n_total: {result_data['n_total'].sum()}")
-    
-    # Process separation (for first crossmatch, it's just the STILTS separation)
-    result_data['Separation'] = df.Separation.fillna(0.0)
-    
-    # Process averaged columns (simple average for first crossmatch)
-    for col in cols_to_avg:
-        col1 = f"{col}_1"
-        col2 = f"{col}_2"
-        vals1 = df[col1].values
-        vals2 = df[col2].values
-        result_data[col] = np.nanmean([vals1, vals2], axis = 0)
-    
-    # Process error columns (simple error propagation for average)
-    for col in error_cols:
-        col1 = f"{col}_1"
-        col2 = f"{col}_2"
-        err1 = df[col1].fillna(0)
-        err2 = df[col2].fillna(0)
-        
-        # For simple average: σ = √(σ₁² + σ₂²) / 2
-        result_data[col] = np.sqrt(err1**2 + err2**2) / 2
-
-    # Initialize magnitude range tracking
-    if 'M' in cols_to_avg:
-        m1 = df.get('M_1', pd.Series(dtype=float))
-        m2 = df.get('M_2', pd.Series(dtype=float))
-        
-        result_data['M_min'] = np.full(len(df), np.nan)
-        result_data['M_max'] = np.full(len(df), np.nan)
-        result_data['M_range'] = np.full(len(df), np.nan)
-        
-        for i in range(len(df)):
-            mag_vals = []
-            if i < len(m1) and pd.notna(m1.iloc[i]):
-                mag_vals.append(m1.iloc[i])
-            if i < len(m2) and pd.notna(m2.iloc[i]):
-                mag_vals.append(m2.iloc[i])
+def match_list_of_files(logger, path_list, db, band):
+    #Just use the first one as starting point
+    try:
+        started = False
+        master_cat = None
+        next_start_id = 0
+        prev_start_id = -1
+        cols_to_drop = ["RA_1", "Dec_1", "RA_2", "Dec_2"]
+        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+            temp_master = Path(tmp_file.name)
+        if not started:
+            master_cat = pd.read_parquet(path_list[0])
+            size_cat = len(master_cat)
+            prev_start_id = next_start_id
+            next_start_id = size_cat + 1
+            # Columns here must be checked, but assuming that required cols are available
+            master_cat["Separation"] = 0.0 # Base coord
+            master_cat["ID"] = range(prev_start_id, next_start_id)
+            zpt = get_from_header(path_list[0], "ZPTMAG")
+            mjd = get_from_header(path_list[0], "MJD-OBS")
+            # Apply ZP and add date column
+            master_cat['M'] += zpt
+            master_cat['MJD'] = mjd
+            bulk_insert(db, master_cat, band)
+            master_cat = master_cat[["ID", "RA", "Dec"]]
+            #Save mastercat
+            master_cat.to_parquet(temp_master, index=False)
+            started = True
             
-            if mag_vals:
-                result_data['M_min'][i] = np.min(mag_vals)
-                result_data['M_max'][i] = np.max(mag_vals)
-                result_data['M_range'][i] = result_data['M_max'][i] - result_data['M_min'][i]
-    
-    result_df = pd.DataFrame(result_data)
-    
-    logger.info(f"First crossmatch post-processing completed: {len(result_df)} rows")
-    logger.info(f"Source counts - n1: {result_df['n1'].sum()}, n3: {result_df['n3'].sum()}, "
-            f"n+: {result_df['n+'].sum()}")
-    
-    return result_df
-
-def post_process_subsequent_crossmatch(logger, df: pd.DataFrame, new_zpt) -> pd.DataFrame:
-    """Post-process subsequent crossmatches with accumulated results."""
-    logger.info("Post-processing subsequent crossmatch...")
-    
-    cols_to_avg = PROCESSING['columns_to_average']
-    error_cols = PROCESSING['error_columns']
-    type_col = PROCESSING['type_column']
-    
-    result_data = {}
-    
-    # Process type counts - add new contributions to existing counts
-    logger.debug("Updating type counts and including zeropoint...")
-    # Special case: magnitudes from "new" catalogue need zeropoint
-    df["M_2"] = df["M_2"] + new_zpt
-    # Get existing counts from catalog 1 (accumulated results)
-    existing_n1 = df.get('n1', pd.Series(0, index=df.index)).fillna(0).astype(int)
-    existing_n3 = df.get('n3', pd.Series(0, index=df.index)).fillna(0).astype(int)
-    existing_nplus = df.get('n+', pd.Series(0, index=df.index)).fillna(0).astype(int)
-    
-    
-    n1, n3, nplus = compute_n_cols(df[type_col])
-
-    result_data['n1'] = n1 + existing_n1
-    result_data['n3'] = n3 + existing_n3
-    result_data['n+'] = nplus + existing_nplus
-    
-    # Compute n_total
-    result_data['n_total'] = result_data['n1'] + result_data['n3'] + result_data['n+']
-    
-    logger.debug(f"Updated counts - n1: {result_data['n1'].sum()}, n3: {result_data['n3'].sum()}, "
-                f"n+: {result_data['n+'].sum()}, n_total: {result_data['n_total'].sum()}")
-    
-    # Process separation with proper averaging
-    logger.debug("Computing updated separations...")
-    result_data['Separation'] = np.zeros(len(df), dtype=float)
-    prev_sep = df.Separation_1.fillna(0.0)
-    new_sep = df.Separation.fillna(0.0)
-    
-    for i in range(len(df)):
-        n_total = result_data['n_total'][i]
-        
-        if n_total <= 1:
-            pass
-        elif n_total == 2:
-            result_data['Separation'][i] = new_sep.iloc[i]
         else:
-            # Formula: (prev_sep * (n_total - 2) + new_sep) / (n_total - 1)
-            result_data['Separation'][i] = (prev_sep.iloc[i] * (n_total - 2) + new_sep.iloc[i]) / (n_total - 1)
-    
-    # Process averaged columns with proper weighting
-    for col in cols_to_avg:
-        col1 = f"{col}_1"
-        col2 = f"{col}_2"
-        
-        if col1 in df.columns and col2 in df.columns:
-            # Get n_total values for weighting
-            n_total_1 = df.n_total
-            n_total_2 = pd.Series(1, index=df.index)  # New catalog contributes 1 source
-            
-            val1 = df[col1]
-            val2 = df[col2]
-            
-            mask1 = pd.notna(val1)
-            mask2 = pd.notna(val2)
-            
-            result_col = np.full(len(df), np.nan)
-            
-            # Both values present - weighted average
-            both_mask = mask1 & mask2
-            if both_mask.any():
-                total_weight = n_total_1[both_mask] + n_total_2[both_mask]
-                result_col[both_mask] = (
-                    (val1[both_mask] * n_total_1[both_mask] + 
-                    val2[both_mask] * n_total_2[both_mask]) / 
-                    total_weight
-                )
-            
-            # Only first value present
-            only1_mask = mask1 & ~mask2
-            if only1_mask.any():
-                result_col[only1_mask] = val1[only1_mask]
-            
-            # Only second value present
-            only2_mask = ~mask1 & mask2
-            if only2_mask.any():
-                result_col[only2_mask] = val2[only2_mask]
-            
-            result_data[col] = result_col
-            
-        elif col1 in df.columns:
-            result_data[col] = df[col1].copy()
-        elif col2 in df.columns:
-            result_data[col] = df[col2].copy()
-    
-    # Process error columns with proper propagation
-    for col in error_cols:
-        col1 = f"{col}_1"
-        col2 = f"{col}_2"
-        
-        if col1 in df.columns and col2 in df.columns:
-            n_total_1 = df.n_total
-            n_total_2 = pd.Series(1, index=df.index)
-            
-            err1 = df[col1].fillna(0)
-            err2 = df[col2].fillna(0)
-            
-            total_weight = n_total_1 + n_total_2
-            weight1 = n_total_1 / total_weight
-            weight2 = n_total_2 / total_weight
-            
-            result_data[col] = np.sqrt((weight1 * err1)**2 + (weight2 * err2)**2)
-        elif col1 in df.columns:
-            result_data[col] = df[col1].copy()
-        elif col2 in df.columns:
-            result_data[col] = df[col2].copy()
-    
-    # Update magnitude range tracking
-    if 'M' in cols_to_avg:
-        m_min_1 = df.get('M_min_1', df.get('M_1', pd.Series(dtype=float)))
-        m_max_1 = df.get('M_max_1', df.get('M_1', pd.Series(dtype=float)))
-        m2 = df.get('M_2', pd.Series(dtype=float))
-        
-        result_data['M_min'] = np.full(len(df), np.nan)
-        result_data['M_max'] = np.full(len(df), np.nan)
-        result_data['M_range'] = np.full(len(df), np.nan)
-        
-        for i in range(len(df)):
-            all_vals = []
-            
-            if i < len(m_min_1) and pd.notna(m_min_1.iloc[i]):
-                all_vals.append(m_min_1.iloc[i])
-            if i < len(m_max_1) and pd.notna(m_max_1.iloc[i]):
-                all_vals.append(m_max_1.iloc[i])
-            if i < len(m2) and pd.notna(m2.iloc[i]):
-                all_vals.append(m2.iloc[i])
-            
-            if all_vals:
-                result_data['M_min'][i] = np.min(all_vals)
-                result_data['M_max'][i] = np.max(all_vals)
-                result_data['M_range'][i] = result_data['M_max'][i] - result_data['M_min'][i]
-    
-    result_df = pd.DataFrame(result_data)
-    
-    logger.info(f"Subsequent crossmatch post-processing completed: {len(result_df)} rows")
-    
-    return result_df
+            for idx, cat_to_match in enumerate(path_list[1:]):
+                
+                # Update input catalogue and save as temp file
+                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                    temp_input = Path(tmp_file.name)
+                in_cat = pd.read_parquet(path_list[idx])
+                zpt = get_from_header(path_list[idx], "ZPTMAG")
+                mjd = get_from_header(path_list[idx], "MJD-OBS")
+                # Apply ZP and add date column
+                in_cat['M'] += zpt
+                in_cat['MJD'] = mjd
+                in_cat.to_parquet(temp_input, index=False)
+
+                temp_master_old = temp_master
+                
+                # Match
+                matched = stilts_crossmatch_pair(logger,temp_master_old, temp_input)
+
+                # Remove temp files
+                temp_master_old.unlink()
+                temp_input.unlink()
+
+                missing_id = pd.isna(matched["ID"])
+                missing_new = pd.isna(matched["RA_1"])
+                total_missing = missing_id.sum()
+                prev_start_id = next_start_id
+                next_start_id = total_missing + 1
+                matched["ID"][missing_id] = range(prev_start_id, next_start_id)
+                to_append = matched[missing_new].copy()
+                to_append.drop(columns=cols_to_drop, inplace=True)
+                bulk_insert(db, to_append, band)
+                # Now update master cat
+                matched["RA_1"].fillna(matched["RA_2"], inplace=True)
+                matched["Dec_1"].fillna(matched["Dec_2"], inplace=True)
+                matched.rename(columns={"RA_1" : "RA", "Dec_1" : "Dec"})
+
+                # New master cat temp file due to chache reasons
+                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                    temp_master = Path(tmp_file.name)
+                matched.to_parquet(temp_master, index=False)
+        final_df = pd.read_parquet(temp_master)
+    except Exception as e:
+        logger.error(e)
+    finally:
+        try:
+            temp_master.unlink()
+            return final_df
+        except Exception as e:
+            logger.error(e)
 
 def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) -> pd.DataFrame:
         """Run STILTS crossmatch between two catalogs."""
@@ -355,221 +238,6 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $
             except:
                 pass
 
-def stilts_final_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
-        """Run STILTS crossmatch between N catalogs."""
-        logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
-        
-        keys = list(path_dictionary.keys())
-        temp_files = []
-        
-        try:
-            # First match: catalogue 1 with catalogue 2
-            logger.info(f"Progressive match 1/{len(keys)-1}: {keys[0]} with {keys[1]}")
-            
-            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
-                current_result = Path(tmp.name)
-            temp_files.append(current_result)
-            
-            cmd = [
-                'java', '-Xms8G', '-Xmx192G',
-                '-jar', STILTS,
-                '-stilts', '-disk', 'tmatch2',
-                f'in1={path_dictionary[keys[0]]}', 'ifmt1=parquet',
-                f'in2={path_dictionary[keys[1]]}', 'ifmt2=parquet',
-                'values1=RA Dec',
-                'values2=RA Dec',
-                'matcher=sky',
-                f'params=1', # Fixed for now, could make it user-defined
-                'tuning=18',
-                'join=1or2',
-                'find=best',
-                # f"icmd1= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
-                # f"icmd2= assert ($4>10)||($8>10)||($12>10)||($16>10); keepcols '$3 $4 $7 $8 $11 $12 $15 $16 $17 $18'",
-                f"icmd1= addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'", # Probably must generalize this to any number of subsets...
-                f"icmd2= addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'",
-                f'suffix1=_{keys[0]}',
-                f'suffix2=_{keys[1]}',
-                'fixcols=all',
-                f'out={current_result}',
-                'ofmt=parquet'
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-            df_temp = pd.read_parquet(current_result)
-            
-            # Coalesce: use cat1 coordinates if available, otherwise cat2
-            df_temp['RA_working'] = df_temp[f'RA_{keys[0]}'].fillna(df_temp[f'RA_{keys[1]}'])
-            df_temp['Dec_working'] = df_temp[f'Dec_{keys[0]}'].fillna(df_temp[f'Dec_{keys[1]}'])
-            
-            # Save back with working coordinates
-            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
-                updated_result = Path(tmp.name)
-            temp_files.append(updated_result)
-            df_temp.to_parquet(updated_result, index=False)
-            current_result = updated_result
-            
-            # Progressive matches: add each subsequent catalogue
-            for i, key in enumerate(keys[2:], start=2):
-                logger.info(f"Progressive match {i}/{len(keys)-1}: adding {key}")
-                
-                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
-                    next_result = Path(tmp.name)
-                temp_files.append(next_result)
-                
-                cmd = [
-                    'java', '-Xms8G', '-Xmx192G',
-                    '-jar', STILTS,
-                    '-stilts', '-disk', 'tmatch2',
-                    f'in1={current_result}', 'ifmt1=parquet',
-                    f'in2={path_dictionary[key]}', 'ifmt2=parquet',
-                    f'values1=RA_working Dec_working',  # Use working RA/Dec
-                    'values2=RA Dec',
-                    'matcher=sky',
-                    f'params=0.5',
-                    'join=1or2',
-                    'find=best',
-                    f"icmd2=addcol nobs $4+$8+$12+$16; keepcols '$17 $18 $19 $20'",
-                    f'out={next_result}',
-                    'ofmt=parquet'
-                ]
-                
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                df_temp = pd.read_parquet(next_result)
-                logger.info(str(df_temp.columns))
-                # Update working coords: use existing if available, otherwise new catalogue
-                df_temp.rename(columns={"RA" : f"RA_{key}",
-                                        "Dec" : f"Dec_{key}",
-                                        "ID" : f"ID_{key}",
-                                        "nobs" : f"nobs_{key}"},
-                               inplace=True)
-                df_temp['RA_working'] = df_temp['RA_working'].fillna(df_temp[f'RA_{key}'])
-                df_temp['Dec_working'] = df_temp['Dec_working'].fillna(df_temp[f'Dec_{key}'])
-                
-                # Save updated version
-                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
-                    updated_result = Path(tmp.name)
-                temp_files.append(updated_result)
-                df_temp.to_parquet(updated_result, index=False)
-                current_result = updated_result
-            
-            # Read final result
-            df = pd.read_parquet(current_result)
-            
-            # Create averaged sky coordinates
-            ra_cols = [f"RA_{k}" for k in keys]
-            dec_cols = [f"Dec_{k}" for k in keys]
-            
-            # Only average columns that exist (handle non-matches)
-            existing_ra_cols = [col for col in ra_cols if col in df.columns]
-            existing_dec_cols = [col for col in dec_cols if col in df.columns]
-            
-            df['RA'] = df[existing_ra_cols].mean(axis=1)
-            df['Dec'] = df[existing_dec_cols].mean(axis=1)
-            df = df.drop(columns=['RA_working', 'Dec_working'])
-            df['ID'] = df.index + 1
-            
-            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
-            
-            return df
-            
-        except subprocess.CalledProcessError as e:
-            logger.error(f"STILTS command failed: {e.stderr}")
-            raise
-        finally:
-            # Clean up all temporary files
-            for tmp_file in temp_files:
-                try:
-                    tmp_file.unlink()
-                except:
-                    pass
-
-
-def stilts_internal_match(logger,  catalog_path: Path, batch_n : int = -1, keys : str = "GroupID", do_centroids: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Run STILTS crossmatch between two catalogs."""
-        logger.info(f"Finding groups in {catalog_path.name} via STILTS internal match")
-        
-        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-            temp_output = Path(tmp_file.name)
-        
-        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file2:
-            temp_output2 = Path(tmp_file2.name)
-
-        if do_centroids:
-            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file_centroid:
-                temp_output_centroid = Path(tmp_file_centroid.name)
-
-        try:
-            cmd = [
-                'java', '-Xms8G', '-Xmx32G', # starting and maximum memory... perhaps add customization option later
-                '-jar', STILTS,
-                '-stilts', 'tmatch1',
-                'action=identify',
-                f"icmd=sort '{CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}'",
-                f"in={catalog_path}", 'ifmt=parquet',
-                'matcher=sky',
-                f"values={CROSSMATCH['col1_ra']} {CROSSMATCH['col1_dec']}",
-                f"params={CROSSMATCH['radius']}",
-                "tuning=18", # This should probably be set as a constant in constants.py
-                'omode=out',
-                f'out={temp_output}', 'ofmt=parquet'
-            ]
-            
-            logger.info(f"Running STILTS command...")
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-
-            df_centroid = None
-            df = pd.read_parquet(temp_output)
-            # Find where GroupID is NaN (non-matched)
-            nan_mask = df['GroupID'].isna()
-            # Generate a sequence that continues from max group and assign to NaNs
-            max_group = int(df['GroupID'].max()) + 1
-            df.loc[nan_mask, 'GroupID'] = range(max_group, max_group + nan_mask.sum())
-            df.to_parquet(temp_output2, index = False)
-
-            if do_centroids:
-                cmd_centroid = [
-                    'java', '-jar', STILTS,
-                    '-stilts', 'tgroup',
-                    f"in={temp_output2}", 'ifmt=parquet',
-                    f'keys={keys}',
-                    f"aggcols=0;count {CROSSMATCH['col1_ra']};mean {CROSSMATCH['col1_dec']};mean",
-                    'omode=out',
-                    f'out={temp_output_centroid}', 'ofmt=parquet'
-                ]
-                
-                result_centroid = subprocess.run(
-                    cmd_centroid,
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                df_centroid = pd.read_parquet(temp_output_centroid)
-                if batch_n >= 0:
-                    df_centroid["batch"] = batch_n
-
-            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
-            
-            return df, df_centroid
-            
-        except subprocess.CalledProcessError as e:
-            logger.error(f"STILTS command failed: {e.stderr}")
-            raise
-        finally:
-            try:
-                temp_output.unlink()
-                temp_output2.unlink()
-                if do_centroids:
-                    temp_output_centroid.unlink()
-            except:
-                pass
-
 def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, indec, match_radius) -> pd.DataFrame:
         """Run STILTS crossmatch between two catalogs."""
         logger.info(f"Crossmatching {in_path.name} with {master_path.name}")
@@ -615,221 +283,96 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
             except:
                 pass
 
-def match_list_of_files(logger, paths, idx):
-    """Create single parquet file with all observations (magnitudes and dates)"""
-    batch_size = 30 # Hard-coded, could change in the future.
-    current_result = None
-    subsets = None
-    
-    try:
-        subsets = [] # Internally crossmatched batches, dataframes
-        subset_centroids = [] # Only mean coordinates and group names
-        for i in range(0, len(paths), batch_size):
-            # Save current result as temporary file
-            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-                current_temp_file = tmp_file.name
-            batch_files = paths[i:i+batch_size]
-            batch_dfs = []
-            for file in batch_files:
-                zpt = get_from_header(file, "ZPTMAG")
-                mjd = get_from_header(file, "MJD-OBS")
-                df = pd.read_parquet(file, engine='pyarrow')
-                # Apply ZP and add date column
-                df['M'] += zpt
-                df['MJD'] = mjd
-                batch_dfs.append(df)
-            
-            # Concatenate batch and save temp
-            batch_num = i//batch_size + 1
-            batch_df = pd.concat(batch_dfs, ignore_index=True)
-            batch_df.to_parquet(current_temp_file, index=False)
-            logger.info(f"Joined batch {batch_num}")
-            full_output, collapsed_output = stilts_internal_match(logger, Path(current_temp_file), batch_num, do_centroids=True)
-            subsets.append((full_output, batch_num))
-            subset_centroids.append(collapsed_output)
-            Path(current_temp_file).unlink()
-        
-        # Save current result as temporary file
-        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_final:
-            final_temp_file = tmp_final.name
-        final_df = pd.concat(subset_centroids, ignore_index=True)
-        final_df.rename(columns={"GroupID" : "GroupID_batch"}, inplace=True)
-        final_df.to_parquet(final_temp_file, index=False)
 
-        current_result, _ = stilts_internal_match(logger, Path(final_temp_file))
+def create_db_ccd_band(logger, band, field_paths, ccd, out_dir):
+
+    db = sqlite3.connect(Path(out_dir, f"{ccd}.db"))
+    initialize_band_table(db, band)
+    relevant_paths = [Path(x, str(ccd), band) for x in field_paths]
+    all_paths = []
+    for this_path in relevant_paths:
+        all_paths += list(this_path.glob("*.parquet"))
+    final_cat = match_list_of_files(logger, all_paths, db, band)
+    final_cat.to_parquet(Path(out_dir, str(ccd),f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
 
-    except Exception as e:
-        logger.error(e)
-
-    finally:
-        try:
-            Path(final_temp_file).unlink()
-            return current_result, subsets, idx
-        except:
-            return None, None, None
-
-def create_ccd_band_field_master_catalog(logger, field_path, ccd, bands):
-    subdirs = [Path(field_path, ccd, band) for band in bands]
-    problems = [not(x.is_dir()) for x in subdirs]
-    any_problem = any(problems)
-    if any_problem:
-        logger.error(f"Problem with directories, check them.")
-    else:
-        try:
-            to_match = [[x for x in y.glob("*.parquet")] for y in subdirs]
-            logger.info(f"Found {[len(x) for x in to_match]} files {[b for b in bands]} to process.")
-            # One worker per band max
-            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-                # Submit all tasks
-                futures = [executor.submit(match_list_of_files, logger, file_list, idx) for idx, file_list in enumerate(to_match)]
-                # Process results as they complete
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        result_df, batch_dfs, out_idx = future.result()
-                        # This must be adapted to store the parquet batch files 
-                        subdir = subdirs[out_idx]
-                        if result_df is not None and len(result_df) > 0:
-                            # Save results
-                            output_file = Path(field_path, ccd, f"{ccd}.{bands[out_idx]}.catalogue.parquet")
-                            batch_path = Path(field_path, ccd, "batches")
-                            batch_path.mkdir(parents=True, exist_ok=True)
-                            # Add column with total number of members per group
-                            result_df['group_members'] = result_df.groupby('GroupID')['count'].transform('sum')
-                            result_df.to_parquet(output_file, index = False)
-                            for batch_info in batch_dfs:
-                                batch_df, batch_num = batch_info
-                                batch_df.to_parquet(Path(batch_path, f"{bands[out_idx]}.{batch_num}.parquet"), index = False)
-                                logger.info(f"Created parquet for batch number {batch_num}")
-                            logger.info(f"Saved results for {subdir.name}: {len(result_df)} sources")
-                        else:
-                            logger.warning(f"No results generated for {subdir.name}")
-                    except Exception as e:
-                        logger.error(f"Found a problem: {e}.")
-        except Exception as e:
-            logger.error(f"Failed to process directory {subdir.name}: {e}")
-
-def create_ccd_band_master_catalog(logger, band, field_paths, ccd, out_dir):
-    # Assumes that ccd master catalogs have been created, no other option.
-    paths_to_master_cats = {x : Path(field_paths[x], str(ccd), f"{ccd}.{band}.catalogue.parquet") for x in range(len(field_paths))}
-    matched = stilts_crossmatch_N(logger, paths_to_master_cats)
-    save_dir = Path(out_dir, str(ccd))
-    save_dir.mkdir(parents=True, exist_ok=True)
-    matched['ID'] = band + (matched.index + 1).astype(str)
-    matched.to_parquet(Path(save_dir, f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
 def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
-    # Assumes that ccd master catalogs have been created, no other option.
-    paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
-    matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
-    # Create and save CCD edges
-    json_file = Path(out_dir, '..', "fields_info.json")
-    if json_file.exists():
-        with open(json_file, 'r') as f:
-            json_data = json.load(f)
-    else:
-        json_data = {}
-    if glob_name not in json_data:
-        json_data[glob_name] = {}
-    if ccd not in json_data[glob_name]:
-        json_data[glob_name][ccd] = {}
+    # Rework to use tmatch... hopefully the new band catalogues contain thousands
+    # of entries, not millions.
+    pass
+    # # Assumes that ccd master catalogs have been created, no other option.
+    # paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
+    # matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
+    # # Create and save CCD edges
+    # json_file = Path(out_dir, '..', "fields_info.json")
+    # if json_file.exists():
+    #     with open(json_file, 'r') as f:
+    #         json_data = json.load(f)
+    # else:
+    #     json_data = {}
+    # if glob_name not in json_data:
+    #     json_data[glob_name] = {}
+    # if ccd not in json_data[glob_name]:
+    #     json_data[glob_name][ccd] = {}
 
-    json_data[glob_name][ccd]["RA"] = [matched.RA.min(), matched.RA.max()]
-    json_data[glob_name][ccd]["Dec"] = [matched.Dec.min(), matched.Dec.max()]
-    with open(json_file, 'w') as f:
-        json.dump(json_data, f, indent=3)
+    # json_data[glob_name][ccd]["RA"] = [matched.RA.min(), matched.RA.max()]
+    # json_data[glob_name][ccd]["Dec"] = [matched.Dec.min(), matched.Dec.max()]
+    # with open(json_file, 'w') as f:
+    #     json.dump(json_data, f, indent=3)
 
-    # Save catalogue
-    matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
-
-def retrieve_cols_from_batches(band, bandid, field_paths, ccd, glob_name, out_dir):
-    band_master = Path(out_dir, ccd, f"{ccd}.{band}.master.catalogue.parquet")
-    # Retrieve relevant row and free memory
-    df_master = pd.read_parquet(band_master)
-    master_row = df_master.loc[df_master['ID'] == bandid].iloc[0].copy()
-    del df_master
-    # The following assumes that the number of directories in GLOBAL_NAME_ONLY
-    # matches the number of RA_ Dec_ pairs in the df_master catalogue
-    total_dirs = len(field_paths)
-    out_df = []
-    paths_to_use = [Path(x, str(ccd)) for x in field_paths]
-    for idx, p in enumerate(paths_to_use):
-        # Into each set of reductions
-        this_group_id = master_row[f"GroupID_{idx}"]
-        check_na = pd.isna(this_group_id) # True is na
-        if check_na:
-            pass
-        else:
-            # Into reduction batches
-            df_batches = pd.read_parquet(Path(p, f"{ccd}.{band}.catalogue.parquet"))
-            sub_df = df_batches.loc[df_batches['GroupID'] == this_group_id]
-            batches = sub_df.batch.values
-            ids = sub_df.GroupID_batch.values
-            del df_batches
-            # Create dictionary in case more than a single ID corresponds to a given batch
-            batches_unified = {}
-            for idx, batch in enumerate(batches):
-                batches_unified[batch] = batches_unified.get(batch, []) + [ids[idx]]
-            # Now operate on each batch once
-            # Could benefit from multi-processing
-            for batch_key in batches_unified.keys():
-                this_batch = pd.read_parquet(Path(p, "batches", f"{band}.{batch_key}.parquet"))
-                ids_to_look_for = batches_unified[batch_key]
-                for current_batch_id in ids_to_look_for:
-                    out_df.append(this_batch[this_batch.GroupID == current_batch_id])
-    out_df = pd.concat(out_df)
-    out_df["Band"] = band
-    # print(out_df.columns)
-    # Index(['RA', 'Dec', 'M', 'dM', 'flux', 'dflux', 'type', 'MJD', 'GroupID',
-    #    'GroupSize', 'Band'],
-    #   dtype='object')
-
-    return out_df
+    # # Save catalogue
+    # matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
 
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
-    master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
-    # Create to_match_cat from df
-    with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-        df_file = tmp_file.name
-    to_match_cat.to_parquet(df_file, index = False)
-    # The command below should probably be merged with stilts_crossmatch_pair
-    # But it requires some refactoring...
-    matches = stilts_crossmatch_external(logger, Path(df_file), master_cat, ra_str, dec_str, match_radius)
-    # Delete temp file
-    Path(df_file).unlink()
+    # Must be reworked to according to the following steps:
+    # Check if any input source is located within the data limits
+    # Perform sql search... parallely perhaps? Look for most efficient method.
+    pass
+    # master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
+    # # Create to_match_cat from df
+    # with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+    #     df_file = tmp_file.name
+    # to_match_cat.to_parquet(df_file, index = False)
+    # # The command below should probably be merged with stilts_crossmatch_pair
+    # # But it requires some refactoring...
+    # matches = stilts_crossmatch_external(logger, Path(df_file), master_cat, ra_str, dec_str, match_radius)
+    # # Delete temp file
+    # Path(df_file).unlink()
 
-    total_matched = len(matches)
-    new_cols = matches.columns.to_list()
-    # Default output is ['ID_1', 'Type', 'Subtype', 'RA_1', 'Dec_1', 'I', 'V', 'V_I', 'P_1',
-    #    'REMARKS', 'RA_g', 'Dec_g', 'ID_g', 'nobs_g', 'RA_r', 'Dec_r', 'ID_r',
-    #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
-    #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
-    #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
-    id_col = "ID_2" if "ID_2" in new_cols else "ID"
+    # total_matched = len(matches)
+    # new_cols = matches.columns.to_list()
+    # # Default output is ['ID_1', 'Type', 'Subtype', 'RA_1', 'Dec_1', 'I', 'V', 'V_I', 'P_1',
+    # #    'REMARKS', 'RA_g', 'Dec_g', 'ID_g', 'nobs_g', 'RA_r', 'Dec_r', 'ID_r',
+    # #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
+    # #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
+    # #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
+    # id_col = "ID_2" if "ID_2" in new_cols else "ID"
 
-    if total_matched > 0:
-        logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
-        timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
-        cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
-        matches.to_csv(cat_path, index=False)
-        logger.info(f"Catalogue created at {cat_path}")
-        # Collect matches
-        for match in matches.itertuples():
-            # Start by checking which bands have matches
-            band_keys = "griz"
-            output = []
-            current_id = getattr(match, id_col)
-            for band in band_keys:
-                band_id = getattr(match, f"ID_{band}")
-                if pd.isna(band_id):
-                    # Nothing to do here
-                    pass
-                else:
-                    output.append(retrieve_cols_from_batches(band, band_id, field_paths, ccd, glob_name, out_dir))
-            df_to_store = pd.concat(output)
-            df_to_store.to_csv(Path(save_dir, f"{ccd}.{current_id}"), index = False)
-    else:
-        logger.info("No matches found. No curves have been extracted.")
-    # Check whether matches is empty
-    # If not empty, retrieve data from relevant places
-    
+    # if total_matched > 0:
+    #     logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
+    #     timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
+    #     cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
+    #     matches.to_csv(cat_path, index=False)
+    #     logger.info(f"Catalogue created at {cat_path}")
+    #     Probably better to preload band catalogues here and pass them as arguments.
+    #     Same idea for batches
+    #     # Collect matches
+    #     for match in matches.itertuples():
+    #         # Start by checking which bands have matches
+    #         band_keys = "griz"
+    #         output = []
+    #         current_id = getattr(match, id_col)
+    #         for band in band_keys:
+    #             band_id = getattr(match, f"ID_{band}")
+    #             if pd.isna(band_id):
+    #                 # Nothing to do here
+    #                 pass
+    #             else:
+    #                 output.append(retrieve_cols_from_batches(band, band_id, field_paths, ccd, glob_name, out_dir))
+    #         df_to_store = pd.concat(output)
+    #         df_to_store.to_csv(Path(save_dir, f"{ccd}.{current_id}.csv"), index = False)
+    # else:
+    #     logger.info("No matches found. No curves have been extracted.")
+    # # Check whether matches is empty
+    # # If not empty, retrieve data from relevant places

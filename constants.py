@@ -38,8 +38,7 @@ STILTS = "/data/DECAMNOAO/ShoCd/code/src/topcat-extra.jar"
 # Mode names and definition
 MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old files are removed.",
          "DCMP_TO_PARQUET" : "Convert dcmp files in a directory created by photpipe to parquet. New subdirectories per each requested band are created.",
-         "CATALOG_PER_CCD_BAND_FIELD" : "Creates catalog of all sources observed in a given configuration of field subset-ccd-band(s). Uses STILTS, so the number of workers set here is irrelevant.",
-         "CATALOG_PER_CCD_BAND" : "Creates catalog of all sources observed in a given configuration of field(global)-ccd-band(s). Uses STILTS, so the number of workers set here is irrelevant.",
+         "CREATE_CCD_BAND_DB" : "Creates catalog of all sources observed in a given configuration of field(global)-ccd-band(s), and also stores individual observations in a sql database. Uses STILTS, so the number of workers set here is irrelevant.",
          "MASTER_CATALOG_CCD" : "Creates single master catalog for each CCD in the provided range, using all four photometric bands (assumes that the corresponding per-band catalogues have been created).",
          "LIGHTCURVE" : "Lightcurve extraction mode based on input CSV catalog. Note that the CCD and band-related arguments are ignored in this case."}
 
