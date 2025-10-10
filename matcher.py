@@ -91,7 +91,8 @@ def match_list_of_files(logger, path_list, db, band):
             
         else:
             for idx, cat_to_match in enumerate(path_list[1:]):
-                
+                print(idx)
+                exit()
                 # Update input catalogue and save as temp file
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_input = Path(tmp_file.name)
