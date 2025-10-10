@@ -82,7 +82,8 @@ def match_list_of_files(logger, path_list, db, band):
             # Apply ZP and add date column
             master_cat['M'] += zpt
             master_cat['MJD'] = mjd
-            bulk_insert(db, master_cat, band)
+            to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
+            bulk_insert(db, to_insert, band)
             master_cat = master_cat[["ID", "RA", "Dec"]]
             #Save mastercat
             master_cat.to_parquet(temp_master, index=False)
@@ -132,6 +133,7 @@ def match_list_of_files(logger, path_list, db, band):
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
         logger.error(e)
+        final_df = None
     finally:
         try:
             temp_master.unlink()
