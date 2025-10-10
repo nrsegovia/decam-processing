@@ -115,7 +115,7 @@ def match_list_of_files(logger, path_list, db, band):
                 total_missing = missing_id.sum()
                 prev_start_id = next_start_id
                 next_start_id = prev_start_id + total_missing + 1
-                print(total_missing, next_start_id-prev_start_id)
+                logger.info(f"{total_missing}, {next_start_id-prev_start_id}")
                 matched["ID"][missing_id] = range(prev_start_id, next_start_id)
                 to_append = matched[missing_new].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
