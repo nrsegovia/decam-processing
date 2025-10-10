@@ -114,7 +114,7 @@ def match_list_of_files(logger, path_list, db, band):
                 missing_new = pd.isna(matched["RA_1"])
                 total_missing = missing_id.sum()
                 prev_start_id = next_start_id
-                next_start_id = total_missing + 1
+                next_start_id = prev_start_id + total_missing + 1
                 matched["ID"][missing_id] = range(prev_start_id, next_start_id)
                 to_append = matched[missing_new].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
@@ -128,7 +128,7 @@ def match_list_of_files(logger, path_list, db, band):
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
-                
+
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
         logger.error(e)
