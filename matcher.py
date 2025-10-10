@@ -66,6 +66,8 @@ def match_list_of_files(logger, path_list, db, band):
         next_start_id = 1
         prev_start_id = -1
         cols_to_drop = ["RA_1", "Dec_1", "RA_2", "Dec_2"]
+        total_files = len(path_list)
+        deciles = np.linspace(0, total_files, 11).astype(int) # This sets when to print
         for idx, cat_to_match in enumerate(path_list):
             if idx == 0:
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
@@ -133,7 +135,8 @@ def match_list_of_files(logger, path_list, db, band):
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
-
+            if idx+1 in deciles:
+                logger.info(f"{idx+1} out of {total_files} processed. Current master catalogue contains {len(matched)} rows.")
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
         logger.error(e)
@@ -147,7 +150,7 @@ def match_list_of_files(logger, path_list, db, band):
 
 def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) -> pd.DataFrame:
         """Run STILTS crossmatch between two catalogs."""
-        logger.info(f"Crossmatching {catalog1_path.name} with {catalog2_path.name}")
+        # logger.info(f"Crossmatching {catalog1_path.name} with {catalog2_path.name}")
         
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
             temp_output = Path(tmp_file.name)
@@ -167,7 +170,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
                 f'out={temp_output}', 'ofmt=parquet'
             ]
             
-            logger.info(f"Running STILTS command...")
+            # logger.info(f"Running STILTS command...")
             
             result = subprocess.run(
                 cmd,
@@ -177,7 +180,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
             )
             
             df = pd.read_parquet(temp_output)
-            logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
+            # logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
             return df
             
