@@ -115,19 +115,23 @@ def match_list_of_files(logger, path_list, db, band):
                 total_missing = missing_id.sum()
                 prev_start_id = next_start_id
                 next_start_id = prev_start_id + total_missing
-                matched["ID"][missing_id] = range(prev_start_id, next_start_id)
+                matched.loc[missing_id, "ID"] = range(prev_start_id, next_start_id)
                 to_append = matched[missing_new].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
                 bulk_insert(db, to_append, band)
                 # Now update master cat
-                matched["RA_1"].fillna(matched["RA_2"], inplace=True)
-                matched["Dec_1"].fillna(matched["Dec_2"], inplace=True)
+                nan_ra = matched["RA_1"].isna()
+                matched.loc[nan_ra, "RA_1"] = matched.loc[nan_ra, "RA_2"]
+                nan_dec = matched["RA_1"].isna()
+                matched.loc[nan_dec, "Dec_1"] = matched.loc[nan_dec, "Dec_2"]
+
                 matched.rename(columns={"RA_1" : "RA", "Dec_1" : "Dec"})
 
                 # New master cat temp file due to chache reasons
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
+                logger.log(str(matched.columns))
 
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
