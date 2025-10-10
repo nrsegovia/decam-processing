@@ -62,43 +62,40 @@ def bulk_insert(db, df, band):
 def match_list_of_files(logger, path_list, db, band):
     #Just use the first one as starting point
     try:
-        started = False
         master_cat = None
         next_start_id = 1
         prev_start_id = -1
         cols_to_drop = ["RA_1", "Dec_1", "RA_2", "Dec_2"]
-        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-            temp_master = Path(tmp_file.name)
-        if not started:
-            master_cat = pd.read_parquet(path_list[0])
-            size_cat = len(master_cat)
-            prev_start_id = next_start_id
-            next_start_id = size_cat + 1
-            # Columns here must be checked, but assuming that required cols are available
-            master_cat["Separation"] = 0.0 # Base coord
-            master_cat["ID"] = range(prev_start_id, next_start_id)
-            zpt = get_from_header(path_list[0], "ZPTMAG")
-            mjd = get_from_header(path_list[0], "MJD-OBS")
-            # Apply ZP and add date column
-            master_cat['M'] += zpt
-            master_cat['MJD'] = mjd
-            to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
-            bulk_insert(db, to_insert, band)
-            master_cat = master_cat[["ID", "RA", "Dec"]]
-            #Save mastercat
-            master_cat.to_parquet(temp_master, index=False)
-            started = True
-            
-        else:
-            for idx, cat_to_match in enumerate(path_list[1:]):
-                print(idx)
-                exit()
+        for idx, cat_to_match in enumerate(path_list):
+            if idx == 0:
+                with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                    temp_master = Path(tmp_file.name)
+
+                master_cat = pd.read_parquet(cat_to_match)
+                size_cat = len(master_cat)
+                prev_start_id = next_start_id
+                next_start_id = size_cat + 1
+                # Columns here must be checked, but assuming that required cols are available
+                master_cat["Separation"] = 0.0 # Base coord
+                master_cat["ID"] = range(prev_start_id, next_start_id)
+                zpt = get_from_header(path_list[0], "ZPTMAG")
+                mjd = get_from_header(path_list[0], "MJD-OBS")
+                # Apply ZP and add date column
+                master_cat['M'] += zpt
+                master_cat['MJD'] = mjd
+                to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
+                bulk_insert(db, to_insert, band)
+                master_cat = master_cat[["ID", "RA", "Dec"]]
+                #Save mastercat
+                master_cat.to_parquet(temp_master, index=False)
+                
+            else:
                 # Update input catalogue and save as temp file
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_input = Path(tmp_file.name)
-                in_cat = pd.read_parquet(path_list[idx])
-                zpt = get_from_header(path_list[idx], "ZPTMAG")
-                mjd = get_from_header(path_list[idx], "MJD-OBS")
+                in_cat = pd.read_parquet(cat_to_match)
+                zpt = get_from_header(cat_to_match, "ZPTMAG")
+                mjd = get_from_header(cat_to_match, "MJD-OBS")
                 # Apply ZP and add date column
                 in_cat['M'] += zpt
                 in_cat['MJD'] = mjd
@@ -131,6 +128,7 @@ def match_list_of_files(logger, path_list, db, band):
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
+                
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
         logger.error(e)
@@ -296,7 +294,7 @@ def create_db_ccd_band(logger, band, field_paths, ccd, out_dir):
     for this_path in relevant_paths:
         all_paths += list(this_path.glob("*.parquet"))
     final_cat = match_list_of_files(logger, all_paths, db, band)
-    final_cat.to_parquet(Path(out_dir, str(ccd),f"{ccd}.{band}.master.catalogue.parquet"), index = False)
+    final_cat.to_parquet(Path(out_dir,f"{ccd}.{band}.master.catalogue.parquet"), index = False)
 
 
 
