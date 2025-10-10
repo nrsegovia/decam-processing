@@ -131,7 +131,7 @@ def match_list_of_files(logger, path_list, db, band):
                 with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
-                logger.log(str(matched.columns))
+                logger.info(str(matched.columns))
 
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
