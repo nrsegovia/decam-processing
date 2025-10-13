@@ -341,7 +341,7 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
     write_queue = Queue()
     writer = Process(
             target=writer_process,
-            args=(write_queue, out_dir, ccd)
+            args=(logger, write_queue, out_dir, ccd, bands)
         )
     writer.start()
 
