@@ -170,9 +170,7 @@ def create_db_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, work
     for number_ccd in these_ccds:
         current_ccd = str(number_ccd)
         logger.info(f"Working on CCD {current_ccd}.")
-        for band in bands:
-            logger.info(f"Started band {band}.")
-            create_db_ccd_band(logger, band, main_dir, current_ccd, out_dir)
+        create_db_ccd_band(logger, bands, main_dir, current_ccd, out_dir)
 
     logger.info("Batch processing completed!")
 

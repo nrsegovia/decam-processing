@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from utils import *
 import concurrent.futures
+from multiprocessing import Pool, Process, Queue
 # import pyarrow.parquet as pq
 # import pyarrow
 from typing import Tuple
@@ -14,6 +15,41 @@ import json
 from datetime import datetime
 # It seems that using sqlalchemy instead would make the process faster?
 import sqlite3
+
+def writer_process(logger, write_queue, out_dir, ccd, bands):
+    """
+    Single writer process - handles all database writes.
+    This ensures no database locking issues.
+    """
+    db_path = Path(out_dir, f"{ccd}.db")
+    db = sqlite3.connect(db_path)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA synchronous=NORMAL")
+    
+    # Initialize all band tables
+    for band in bands:
+        initialize_band_table(db, band)
+    
+    processed_count = 0
+    
+    while True:
+        item = write_queue.get()
+        
+        if item is None:  # shutdown signal
+            break
+        
+        band, df = item
+        
+        # Write to database
+        df.to_sql(f'lightcurves_{band}', db, if_exists='append',
+                  index=False, method='multi', chunksize=10000)
+        db.commit()
+        
+        processed_count += 1
+        logger.info(f"Written band {band} to database ({processed_count} batches total)")
+    
+    db.close()
+    logger.info(f"Writer process finished. Total batches written: {processed_count}")
 
 def initialize_band_table(db, band):
     db.execute(f"""
@@ -59,8 +95,9 @@ def bulk_insert(db, df, band):
     db.commit()
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
-def match_list_of_files(logger, path_list, db, band):
+def match_list_of_files(logger, path_list, band, write_queue):
     #Just use the first one as starting point
+    logger.info(f"Starting worker for band {band}")
     try:
         master_cat = None
         next_start_id = 1
@@ -86,7 +123,8 @@ def match_list_of_files(logger, path_list, db, band):
                 master_cat['M'] += zpt
                 master_cat['MJD'] = mjd
                 to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
-                bulk_insert(db, to_insert, band)
+                write_queue.put((band, to_insert))
+                # bulk_insert(db, to_insert, band)
                 master_cat = master_cat[["ID", "RA", "Dec"]]
                 #Save mastercat
                 master_cat.to_parquet(temp_master, index=False)
@@ -120,7 +158,8 @@ def match_list_of_files(logger, path_list, db, band):
                 matched.loc[missing_id, "ID"] = range(prev_start_id, next_start_id)
                 to_append = matched[missing_new].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
-                bulk_insert(db, to_append, band)
+                write_queue.put((band, to_append))
+                # bulk_insert(db, to_append, band)
                 # Now update master cat
                 nan_ra = matched["RA_1"].isna()
                 matched.loc[nan_ra, "RA_1"] = matched.loc[nan_ra, "RA_2"]
@@ -144,6 +183,7 @@ def match_list_of_files(logger, path_list, db, band):
     finally:
         try:
             temp_master.unlink()
+            logger.info(f"Band {band} processing complete")
             return final_df
         except Exception as e:
             logger.error(e)
@@ -293,16 +333,40 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
                 pass
 
 
-def create_db_ccd_band(logger, band, field_paths, ccd, out_dir):
+def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
+    # Probably must add method to check what ccd, band and field? has been completed
+    # Otherwise the database must be deleted every time a new dataset wants to be added...
 
-    db = sqlite3.connect(Path(out_dir, f"{ccd}.db"))
-    initialize_band_table(db, band)
-    relevant_paths = [Path(x, str(ccd), band) for x in field_paths]
-    all_paths = []
-    for this_path in relevant_paths:
-        all_paths += list(this_path.glob("*.parquet"))
-    final_cat = match_list_of_files(logger, all_paths, db, band)
-    final_cat.to_parquet(Path(out_dir,f"{ccd}.{band}.master.catalogue.parquet"), index = False)
+    write_queue = Queue()
+    writer = Process(
+            target=writer_process,
+            args=(write_queue, out_dir, ccd)
+        )
+    writer.start()
+
+    # Process bands in parallel using Pool
+    args_list = []
+
+    for band in bands:
+        relevant_paths = [Path(x, str(ccd), band) for x in field_paths]
+        all_paths = []
+        for this_path in relevant_paths:
+            all_paths += list(this_path.glob("*.parquet"))
+        args_list.append((logger, all_paths, band, write_queue))
+
+    with Pool(len(bands)) as pool:
+        # starmap returns list of results in order
+        results = pool.starmap(match_list_of_files, args_list)
+    
+    for band, df in results:
+        df.to_parquet(Path(out_dir, f"{ccd}.{band}.master.catalogue.parquet"), index = False)        
+    
+    # Stop writer
+    write_queue.put(None)
+    writer.join()
+
+    logger.info("All bands processed and written to database")
+
 
 
 
