@@ -344,7 +344,7 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
 def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
     # Probably must add method to check what ccd, band and field? has been completed
     # Otherwise the database must be deleted every time a new dataset wants to be added...
-
+    Path(out_dir).mkdir(exist_ok=True, parents=True)
     write_queue = Queue()
     writer = Process(
             target=writer_process,
@@ -377,7 +377,7 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
 
     except Exception as e:    
         logger.error(e)
-        
+
     finally:
         # Stop writer
         write_queue.put(None)
