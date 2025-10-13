@@ -103,6 +103,7 @@ def initialize_band_table(db, band):
 def match_list_of_files(logger, path_list, band):
     #Just use the first one as starting point
     logger.info(f"Starting worker for band {band}")
+    final_df = None
     try:
         master_cat = None
         next_start_id = 1
@@ -187,7 +188,7 @@ def match_list_of_files(logger, path_list, band):
         try:
             temp_master.unlink()
             logger.info(f"Band {band} processing complete")
-            return final_df
+            return band, final_df
         except Exception as e:
             logger.error(e)
 
@@ -310,7 +311,8 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
                 f"values1={inra} {indec}",
                 f"values2=RA Dec",
                 f"params={match_radius}",
-                f"join=1and2",
+                f"join=all1",
+                f"find=all"
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
@@ -358,25 +360,30 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
     # Process bands in parallel using Pool
     args_list = []
 
-    for band in bands:
-        relevant_paths = [Path(x, str(ccd), band) for x in field_paths]
-        all_paths = []
-        for this_path in relevant_paths:
-            all_paths += list(this_path.glob("*.parquet"))
-        args_list.append((logger, all_paths, band))
+    try:
+        for band in bands:
+            relevant_paths = [Path(x, str(ccd), band) for x in field_paths]
+            all_paths = []
+            for this_path in relevant_paths:
+                all_paths += list(this_path.glob("*.parquet"))
+            args_list.append((logger, all_paths, band))
 
-    with Pool(len(bands), initializer=init_worker, initargs=(write_queue, )) as pool:
-        # starmap returns list of results in order
-        results = pool.starmap(match_list_of_files, args_list)
-    
-    for band, df in results:
-        df.to_parquet(Path(out_dir, f"{ccd}.{band}.master.catalogue.parquet"), index = False)        
-    
-    # Stop writer
-    write_queue.put(None)
-    writer.join()
+        with Pool(len(bands), initializer=init_worker, initargs=(write_queue, )) as pool:
+            # starmap returns list of results in order
+            results = pool.starmap(match_list_of_files, args_list)
+        
+        for band, df in results:
+            df.to_parquet(Path(out_dir, f"{ccd}.{band}.master.catalogue.parquet"), index = False)        
 
-    logger.info("All bands processed and written to database")
+    except Exception as e:    
+        logger.error(e)
+        
+    finally:
+        # Stop writer
+        write_queue.put(None)
+        writer.join()
+
+        logger.info("All bands processed and written to database")
 
 
 
@@ -438,6 +445,8 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
         timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
         cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
         matches.to_csv(cat_path, index=False)
+        exit()
+        # Hard stop for now, to check the format of the output catalogue.
         logger.info(f"Catalogue created at {cat_path}")
         # Collect matches per band, then combine accordingly
         all_results = []
