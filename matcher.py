@@ -163,7 +163,7 @@ def match_list_of_files(logger, path_list, band, write_queue):
                 # Now update master cat
                 nan_ra = matched["RA_1"].isna()
                 matched.loc[nan_ra, "RA_1"] = matched.loc[nan_ra, "RA_2"]
-                nan_dec = matched["RA_1"].isna()
+                nan_dec = matched["Dec_1"].isna()
                 matched.loc[nan_dec, "Dec_1"] = matched.loc[nan_dec, "Dec_2"]
 
                 matched.rename(columns={"RA_1" : "RA", "Dec_1" : "Dec"}, inplace=True)
@@ -234,6 +234,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
                 pass
 
 def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $6 $8') -> pd.DataFrame:
+        #ID RA Dec
         """Run STILTS crossmatch between N catalogs."""
         logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
         
@@ -373,29 +374,28 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
 def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Rework to use tmatch... hopefully the new band catalogues contain thousands
     # of entries, not millions.
-    pass
-    # # Assumes that ccd master catalogs have been created, no other option.
-    # paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
-    # matched = stilts_final_crossmatch_N(logger, paths_to_master_cats)
-    # # Create and save CCD edges
-    # json_file = Path(out_dir, '..', "fields_info.json")
-    # if json_file.exists():
-    #     with open(json_file, 'r') as f:
-    #         json_data = json.load(f)
-    # else:
-    #     json_data = {}
-    # if glob_name not in json_data:
-    #     json_data[glob_name] = {}
-    # if ccd not in json_data[glob_name]:
-    #     json_data[glob_name][ccd] = {}
+    # Assumes that ccd master catalogs have been created, no other option.
+    paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
+    matched = stilts_crossmatch_N(logger, paths_to_master_cats)
+    # Create and save CCD edges
+    json_file = Path(out_dir, '..', "fields_info.json")
+    if json_file.exists():
+        with open(json_file, 'r') as f:
+            json_data = json.load(f)
+    else:
+        json_data = {}
+    if glob_name not in json_data:
+        json_data[glob_name] = {}
+    if ccd not in json_data[glob_name]:
+        json_data[glob_name][ccd] = {}
 
-    # json_data[glob_name][ccd]["RA"] = [matched.RA.min(), matched.RA.max()]
-    # json_data[glob_name][ccd]["Dec"] = [matched.Dec.min(), matched.Dec.max()]
-    # with open(json_file, 'w') as f:
-    #     json.dump(json_data, f, indent=3)
+    json_data[glob_name][ccd]["RA"] = [matched.RA.min(), matched.RA.max()]
+    json_data[glob_name][ccd]["Dec"] = [matched.Dec.min(), matched.Dec.max()]
+    with open(json_file, 'w') as f:
+        json.dump(json_data, f, indent=3)
 
-    # # Save catalogue
-    # matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
+    # Save catalogue
+    matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
 
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
     # Must be reworked to according to the following steps:
