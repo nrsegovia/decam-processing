@@ -6,15 +6,33 @@ import subprocess
 import pandas as pd
 import numpy as np
 from utils import *
-import concurrent.futures
 from multiprocessing import Pool, Process, Queue
-# import pyarrow.parquet as pq
-# import pyarrow
-from typing import Tuple
 import json
 from datetime import datetime
 # It seems that using sqlalchemy instead would make the process faster?
 import sqlite3
+
+def get_rows_by_ids(db_path, table_name, ids):
+    """
+    Retrieve rows from a SQLite table matching the given IDs.
+    Assumes ID column is named 'ID'.
+    
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame containing all matching rows from the database.
+        Empty DataFrame if no matches found in the database.
+    """
+    if not isinstance(ids, (list, tuple)):
+        ids = [ids]
+    
+    conn = sqlite3.connect(db_path)
+    placeholders = ','.join('?' * len(ids))
+    query = f"SELECT * FROM {table_name} WHERE ID IN ({placeholders})"
+    df = pd.read_sql_query(query, conn, params=ids)
+    conn.close()
+    
+    return df
 
 def writer_process(logger, write_queue, out_dir, ccd, bands):
     """
@@ -46,7 +64,7 @@ def writer_process(logger, write_queue, out_dir, ccd, bands):
         db.commit()
         
         processed_count += 1
-        logger.info(f"Written band {band} to database ({processed_count} batches total)")
+        # logger.info(f"Written band {band} to database ({processed_count} batches total)")
     
     db.close()
     logger.info(f"Writer process finished. Total batches written: {processed_count}")
@@ -80,19 +98,6 @@ def initialize_band_table(db, band):
             
     db.commit()
 
-def bulk_insert(db, df, band):
-    """
-    Efficiently insert large batch of observations.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Must have columns: ID, MJD, M, dM, flux, dflux, 
-                            type, Separation
-    """
-    df.to_sql(f'lightcurves_{band}', db, if_exists='append', 
-                index=False, method='multi', chunksize=10000)
-    db.commit()
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
 def match_list_of_files(logger, path_list, band):
@@ -124,7 +129,6 @@ def match_list_of_files(logger, path_list, band):
                 master_cat['MJD'] = mjd
                 to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
                 worker_queue.put((band, to_insert)) # This comes from the global variable
-                # bulk_insert(db, to_insert, band)
                 master_cat = master_cat[["ID", "RA", "Dec"]]
                 #Save mastercat
                 master_cat.to_parquet(temp_master, index=False)
@@ -159,7 +163,6 @@ def match_list_of_files(logger, path_list, band):
                 to_append = matched[missing_new].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
                 worker_queue.put((band, to_append)) # This comes from the global variable
-                # bulk_insert(db, to_append, band)
                 # Now update master cat
                 nan_ra = matched["RA_1"].isna()
                 matched.loc[nan_ra, "RA_1"] = matched.loc[nan_ra, "RA_2"]
@@ -175,7 +178,7 @@ def match_list_of_files(logger, path_list, band):
                     temp_master = Path(tmp_file.name)
                 matched.to_parquet(temp_master, index=False)
             if idx+1 in deciles:
-                logger.info(f"{idx+1} out of {total_files} processed. Current master catalogue contains {len(matched)} rows.")
+                logger.info(f"{band}-band: {idx+1} out of {total_files} processed. Current master catalogue contains {len(matched)} rows.")
         final_df = pd.read_parquet(temp_master)
     except Exception as e:
         logger.error(e)
@@ -233,7 +236,7 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
             except:
                 pass
 
-def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $6 $8') -> pd.DataFrame:
+def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
         #ID RA Dec
         """Run STILTS crossmatch between N catalogs."""
         logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
@@ -245,18 +248,18 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $
             these_keys = list(path_dictionary.keys())
             cmd = [
                 'java', '-jar', STILTS,
-                '-stilts', 'tmatchn']
+                '-stilts', '-Xmx128G', 'tmatchn']
             for index, key in enumerate(these_keys, start=1):
                 cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
                         f"values{index}=RA Dec", f"join{index}=always",
-                        f"icmd{index}=keepcols '{keepcols}'",
+                        # f"icmd{index}=keepcols '{keepcols}'",
                         f"suffix{index}=_{key}"]
 
             cmd += ["fixcols=all",
                 f'nin={len(path_dictionary)}',
                 'matcher=sky',
                 'multimode=pairs',
-                f"params={CROSSMATCH['radius_matchn']}",
+                f"params={CROSSMATCH['radius']}",
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
@@ -274,6 +277,8 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict, keepcols: str = '$3 $4 $
             # Create single sky coordinates based on wavelength importance (blue > red)
             df['RA'] = df[[f"RA_{x}" for x in these_keys]].bfill(axis=1).iloc[:, 0]
             df['Dec'] = df[[f"Dec_{x}" for x in these_keys]].bfill(axis=1).iloc[:, 0]
+            # Create "Global" ID
+            df['ID'] = range(1, len(df) + 1)
             
             logger.info(f"Crossmatch completed: {len(df)} rows, {len(df.columns)} columns")
             
@@ -405,52 +410,51 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
     # Must be reworked to according to the following steps:
     # Check if any input source is located within the data limits
+    # Crossmatch external with final master
     # Perform sql search... parallely perhaps? Look for most efficient method.
-    pass
-    # master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
-    # # Create to_match_cat from df
-    # with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
-    #     df_file = tmp_file.name
-    # to_match_cat.to_parquet(df_file, index = False)
-    # # The command below should probably be merged with stilts_crossmatch_pair
-    # # But it requires some refactoring...
-    # matches = stilts_crossmatch_external(logger, Path(df_file), master_cat, ra_str, dec_str, match_radius)
-    # # Delete temp file
-    # Path(df_file).unlink()
+    db_path = Path(out_dir, f"{ccd}.db")
+    master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
+    # Create to_match_cat from df
+    with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+        df_file = tmp_file.name
+    to_match_cat.to_parquet(df_file, index = False)
+    # The command below should probably be merged with stilts_crossmatch_pair
+    # But it requires some refactoring...
+    matches = stilts_crossmatch_external(logger, Path(df_file), master_cat, ra_str, dec_str, match_radius)
+    # Delete temp file
+    Path(df_file).unlink()
 
-    # total_matched = len(matches)
-    # new_cols = matches.columns.to_list()
-    # # Default output is ['ID_1', 'Type', 'Subtype', 'RA_1', 'Dec_1', 'I', 'V', 'V_I', 'P_1',
-    # #    'REMARKS', 'RA_g', 'Dec_g', 'ID_g', 'nobs_g', 'RA_r', 'Dec_r', 'ID_r',
-    # #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
-    # #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
-    # #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
-    # id_col = "ID_2" if "ID_2" in new_cols else "ID"
+    total_matched = len(matches)
+    new_cols = matches.columns.to_list()
+    # Default output is ['ID_1', 'Type', 'Subtype', 'RA_1', 'Dec_1', 'I', 'V', 'V_I', 'P_1',
+    #    'REMARKS', 'RA_g', 'Dec_g', 'ID_g', 'nobs_g', 'RA_r', 'Dec_r', 'ID_r',
+    #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
+    #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
+    #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
+    id_col = "ID_2" if "ID_2" in new_cols else "ID"
 
-    # if total_matched > 0:
-    #     logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
-    #     timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
-    #     cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
-    #     matches.to_csv(cat_path, index=False)
-    #     logger.info(f"Catalogue created at {cat_path}")
-    #     Probably better to preload band catalogues here and pass them as arguments.
-    #     Same idea for batches
-    #     # Collect matches
-    #     for match in matches.itertuples():
-    #         # Start by checking which bands have matches
-    #         band_keys = "griz"
-    #         output = []
-    #         current_id = getattr(match, id_col)
-    #         for band in band_keys:
-    #             band_id = getattr(match, f"ID_{band}")
-    #             if pd.isna(band_id):
-    #                 # Nothing to do here
-    #                 pass
-    #             else:
-    #                 output.append(retrieve_cols_from_batches(band, band_id, field_paths, ccd, glob_name, out_dir))
-    #         df_to_store = pd.concat(output)
-    #         df_to_store.to_csv(Path(save_dir, f"{ccd}.{current_id}.csv"), index = False)
-    # else:
-    #     logger.info("No matches found. No curves have been extracted.")
-    # # Check whether matches is empty
-    # # If not empty, retrieve data from relevant places
+    if total_matched > 0:
+        logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
+        timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
+        cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
+        matches.to_csv(cat_path, index=False)
+        logger.info(f"Catalogue created at {cat_path}")
+        # Collect matches per band, then combine accordingly
+        all_results = []
+        for band in "griz":
+            id_col = matches[f"ID_{band}"]
+            id_mask = id_col.notna()
+            valid_ids = id_col[id_mask].values
+            main_ids = matches.ID[id_mask].values
+            stack_df = get_rows_by_ids(db_path, f"lightcuves_{band}",valid_ids)
+            stack_df["band"] = band
+            stack_df.rename(columns={"ID" : "ID_band"})
+            id_dict = dict(zip(valid_ids,main_ids))
+            stack_df["ID"] = stack_df['ID_band'].map(id_dict)
+
+        concat_df = pd.concat(all_results)
+        # For simplicity store as single file. Later add option to store individual files
+        concat_df.to_csv(Path(save_dir, f"{ccd}.query_results.csv"), index = False)
+    else:
+        logger.info("No matches found. No curves have been extracted.")
+    

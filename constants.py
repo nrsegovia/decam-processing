@@ -50,8 +50,7 @@ CROSSMATCH = {"radius"    : 1.0,
               "col1_dec"  : "Dec",
               "col2_ra"   : "RA",
               "col2_dec"  : "Dec",
-              "join_type" : "1or2",
-              "radius_matchn" : 1.0}
+              "join_type" : "1or2"}
 
 PROCESSING = {"input_columns"      : ["RA", "Dec", "M", "dM", "flux", "dflux", "type"],
               "columns_to_average" : ["RA", "Dec", "M"],
