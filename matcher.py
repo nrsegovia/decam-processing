@@ -95,7 +95,7 @@ def bulk_insert(db, df, band):
     db.commit()
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
-def match_list_of_files(logger, path_list, band, write_queue):
+def match_list_of_files(logger, path_list, band):
     #Just use the first one as starting point
     logger.info(f"Starting worker for band {band}")
     try:
@@ -123,7 +123,7 @@ def match_list_of_files(logger, path_list, band, write_queue):
                 master_cat['M'] += zpt
                 master_cat['MJD'] = mjd
                 to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
-                write_queue.put((band, to_insert))
+                worker_queue.put((band, to_insert)) # This comes from the global variable
                 # bulk_insert(db, to_insert, band)
                 master_cat = master_cat[["ID", "RA", "Dec"]]
                 #Save mastercat
@@ -158,7 +158,7 @@ def match_list_of_files(logger, path_list, band, write_queue):
                 matched.loc[missing_id, "ID"] = range(prev_start_id, next_start_id)
                 to_append = matched[missing_new].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
-                write_queue.put((band, to_append))
+                worker_queue.put((band, to_append)) # This comes from the global variable
                 # bulk_insert(db, to_append, band)
                 # Now update master cat
                 nan_ra = matched["RA_1"].isna()
@@ -345,6 +345,11 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
         )
     writer.start()
 
+    def init_worker(q):
+        # To make the queue accessible from all processes
+        global worker_queue
+        worker_queue = q
+
     # Process bands in parallel using Pool
     args_list = []
 
@@ -353,9 +358,9 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
         all_paths = []
         for this_path in relevant_paths:
             all_paths += list(this_path.glob("*.parquet"))
-        args_list.append((logger, all_paths, band, write_queue))
+        args_list.append((logger, all_paths, band))
 
-    with Pool(len(bands)) as pool:
+    with Pool(len(bands), initializer=init_worker, initargs=(write_queue, )) as pool:
         # starmap returns list of results in order
         results = pool.starmap(match_list_of_files, args_list)
     
