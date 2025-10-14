@@ -313,7 +313,7 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
                 f"values2=RA Dec",
                 f"params={match_radius}",
                 f"join=1and2",
-                f"find=all"
+                f"find=all",
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
             ]
