@@ -157,14 +157,26 @@ def match_list_of_files(logger, path_list, band):
                 temp_input.unlink()
 
                 missing_id = pd.isna(matched["ID"])
-                total_missing = missing_id.sum()
-                prev_start_id = next_start_id
-                next_start_id = prev_start_id + total_missing
-                matched.loc[missing_id, "ID"] = range(prev_start_id, next_start_id)
-                to_append = matched[missing_id].copy()
-                to_append.drop(columns=cols_to_drop, inplace=True)
-                logger.info(to_append.head())
-                worker_queue.put((band, to_append)) # This comes from the global variable
+                
+                # Pre-existing matches
+                to_append_pre = matched[~missing_id].copy() # the ~ applies a "not"
+                to_append_pre.drop(columns=cols_to_drop, inplace=True)
+                to_db = [to_append_pre]
+                
+                # If any new matches
+                if sum(missing_id) > 0:
+                    total_missing = missing_id.sum()
+                    prev_start_id = next_start_id
+                    next_start_id = prev_start_id + total_missing
+                    matched.loc[missing_id, "ID"] = range(prev_start_id, next_start_id)
+                    to_append = matched[missing_id].copy()
+                    to_append.drop(columns=cols_to_drop, inplace=True)
+                    to_append["Separation"] = 0.0
+                    to_db.append(to_append)
+                    logger.info(to_append.head())
+
+                to_db = pd.concat(to_db)
+                worker_queue.put((band, to_db)) # This comes from the global variable
                 # Now update master cat
                 nan_ra = matched["RA_1"].isna()
                 matched.loc[nan_ra, "RA_1"] = matched.loc[nan_ra, "RA_2"]
