@@ -25,10 +25,10 @@ def get_rows_by_ids(db_path, table_name, ids):
     """
     if not isinstance(ids, (list, tuple)):
         ids = [ids]
-    print(ids)
     conn = sqlite3.connect(db_path)
     placeholders = ','.join('?' * len(ids))
     query = f"SELECT * FROM {table_name} WHERE ID IN ({placeholders})"
+    print(query)
     df = pd.read_sql_query(query, conn, params=ids)
     conn.close()
     print(df.head())
