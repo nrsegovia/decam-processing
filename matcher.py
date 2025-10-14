@@ -413,7 +413,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
         json.dump(json_data, f, indent=3)
 
     # Save catalogue
-    matched.to_parquet(Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet"), index = False)
+    matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue.parquet"), index = False)
 
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
     # Must be reworked to according to the following steps:
