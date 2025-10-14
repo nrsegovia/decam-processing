@@ -126,9 +126,7 @@ def match_list_of_files(logger, path_list, band):
                 # Apply ZP and add date column
                 master_cat['M'] += zpt
                 master_cat['MJD'] = mjd
-                logger.info(str(mjd))
                 to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
-                logger.info(to_insert.head())
                 worker_queue.put((band, to_insert)) # This comes from the global variable
                 master_cat = master_cat[["ID", "RA", "Dec"]]
                 #Save mastercat
@@ -141,7 +139,6 @@ def match_list_of_files(logger, path_list, band):
                 in_cat = pd.read_parquet(cat_to_match)
                 zpt = get_from_header(cat_to_match, "ZPTMAG")
                 mjd = get_from_header(cat_to_match, "MJD-OBS")
-                logger.info(str(mjd))
                 # Apply ZP and add date column
                 in_cat['M'] += zpt
                 in_cat['MJD'] = mjd
@@ -162,8 +159,6 @@ def match_list_of_files(logger, path_list, band):
                 # Pre-existing matches
                 to_append_pre = matched[(~missing_id) & (~missing_ra)].copy() # the ~ applies a "not"
                 to_append_pre.drop(columns=cols_to_drop, inplace=True)
-                logger.info("Old matches")
-                logger.info(to_append_pre.head())
                 to_db = [to_append_pre]
 
                 # If any new matches
@@ -176,8 +171,6 @@ def match_list_of_files(logger, path_list, band):
                     to_append.drop(columns=cols_to_drop, inplace=True)
                     to_append["Separation"] = 0.0
                     to_db.append(to_append)
-                    logger.info("New matches")
-                    logger.info(to_append.head())
 
                 to_db = pd.concat(to_db)
                 worker_queue.put((band, to_db)) # This comes from the global variable
