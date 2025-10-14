@@ -392,7 +392,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Rework to use tmatch... hopefully the new band catalogues contain thousands
     # of entries, not millions.
     # Assumes that ccd master catalogs have been created, no other option.
-    paths_to_master_cats = {x : Path(out_dir, str(ccd), f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
+    paths_to_master_cats = {x : Path(out_dir, f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
     matched = stilts_crossmatch_N(logger, paths_to_master_cats)
     # Create and save CCD edges
     json_file = Path(out_dir, '..', "fields_info.json")
