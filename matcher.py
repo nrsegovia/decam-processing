@@ -70,14 +70,14 @@ def writer_process(logger, write_queue, out_dir, ccd, bands):
 def initialize_band_table(db, band):
     db.execute(f"""
                 CREATE TABLE IF NOT EXISTS lightcurves_{band} (
-                    ID TEXT NOT NULL,
+                    ID INTEGER NOT NULL,
                     MJD REAL NOT NULL,
-                    M REAL,
-                    dM REAL,
-                    flux REAL,
-                    dflux REAL,
-                    type INTEGER,
-                    Separation REAL,
+                    M REAL NOT NULL,
+                    dM REAL NOT NULL,
+                    flux REAL NOT NULL,
+                    dflux REAL NOT NULL,
+                    type INTEGER NOT NULL,
+                    Separation REAL NOT NULL,
 
                     PRIMARY KEY (ID, MJD)
                 )
@@ -126,6 +126,7 @@ def match_list_of_files(logger, path_list, band):
                 # Apply ZP and add date column
                 master_cat['M'] += zpt
                 master_cat['MJD'] = mjd
+                logger.info(str(mjd))
                 to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
                 worker_queue.put((band, to_insert)) # This comes from the global variable
                 master_cat = master_cat[["ID", "RA", "Dec"]]
@@ -139,6 +140,7 @@ def match_list_of_files(logger, path_list, band):
                 in_cat = pd.read_parquet(cat_to_match)
                 zpt = get_from_header(cat_to_match, "ZPTMAG")
                 mjd = get_from_header(cat_to_match, "MJD-OBS")
+                logger.info(str(mjd))
                 # Apply ZP and add date column
                 in_cat['M'] += zpt
                 in_cat['MJD'] = mjd
