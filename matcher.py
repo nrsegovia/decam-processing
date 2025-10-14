@@ -6,7 +6,7 @@ import subprocess
 import pandas as pd
 import numpy as np
 from utils import *
-from multiprocessing import Pool, Process, Queue
+from multiprocessing import Pool, Process, Manager
 import json
 from datetime import datetime
 # It seems that using sqlalchemy instead would make the process faster?
@@ -356,7 +356,8 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
     # Probably must add method to check what ccd, band and field? has been completed
     # Otherwise the database must be deleted every time a new dataset wants to be added...
     Path(out_dir).mkdir(exist_ok=True, parents=True)
-    write_queue = Queue()
+    manager = Manager()
+    write_queue = manager.Queue(maxsize=0)  # No size limit
     writer = Process(
             target=writer_process,
             args=(logger, write_queue, out_dir, ccd, bands)
