@@ -240,7 +240,8 @@ def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) ->
 def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
         #ID RA Dec
         """Run STILTS crossmatch between N catalogs."""
-        logger.info(f"Crossmatching catalogs: {path_dictionary.values()}")
+        path_string = '\n'.join([str(x) for x in path_dictionary.values()])
+        logger.info(f"Crossmatching catalogs: {path_string}")
         
         with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
             temp_output = Path(tmp_file.name)
@@ -248,8 +249,8 @@ def stilts_crossmatch_N(logger,  path_dictionary: dict) -> pd.DataFrame:
         try:
             these_keys = list(path_dictionary.keys())
             cmd = [
-                'java', '-jar', STILTS,
-                '-stilts', '-Xmx128G', 'tmatchn']
+                'java', '-Xmx128G', '-jar', STILTS,
+                '-stilts', 'tmatchn']
             for index, key in enumerate(these_keys, start=1):
                 cmd += [f"in{index}={path_dictionary[key]}", f'ifmt{index}=parquet',
                         f"values{index}=RA Dec", f"join{index}=always",
