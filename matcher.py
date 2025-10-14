@@ -450,13 +450,13 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
         for band in "griz":
             id_col = matches[f"ID_{band}"]
             id_mask = id_col.notna()
-            valid_ids = id_col[id_mask].values.astype(int)
-            main_ids = matches[id_col_label][id_mask].values.astype(int)
+            valid_ids = id_col[id_mask].values
+            main_ids = matches[id_col_label][id_mask].values
             stack_df = get_rows_by_ids(db_path, f"lightcurves_{band}",valid_ids)
             stack_df["band"] = band
             stack_df.rename(columns={"ID" : "ID_band"}, inplace=True)
-            stack_df['ID_band'] = stack_df['ID_band'].astype(int)
             id_dict = dict(zip(valid_ids,main_ids))
+            print(id_dict[stack_df['ID_band'].values[0]])
             stack_df["ID"] = stack_df['ID_band'].map(id_dict)
             all_results.append(stack_df)
 
