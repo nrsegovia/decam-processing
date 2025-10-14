@@ -312,7 +312,7 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
                 f"values1={inra} {indec}",
                 f"values2=RA Dec",
                 f"params={match_radius}",
-                f"join=all1",
+                f"join=1and2",
                 f"find=all"
                 'omode=out',
                 f'out={temp_output}', 'ofmt=parquet'
@@ -421,7 +421,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     # Crossmatch external with final master
     # Perform sql search... parallely perhaps? Look for most efficient method.
     db_path = Path(out_dir, f"{ccd}.db")
-    master_cat = Path(out_dir, str(ccd), f"{ccd}.final.catalogue.parquet")
+    master_cat = Path(out_dir, f"{ccd}.final.catalogue.parquet")
     # Create to_match_cat from df
     with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
         df_file = tmp_file.name
@@ -446,8 +446,6 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
         timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
         cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
         matches.to_csv(cat_path, index=False)
-        exit()
-        # Hard stop for now, to check the format of the output catalogue.
         logger.info(f"Catalogue created at {cat_path}")
         # Collect matches per band, then combine accordingly
         all_results = []
