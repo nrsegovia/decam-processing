@@ -439,7 +439,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     #    'nobs_r', 'Separation_1', 'RA_i', 'Dec_i', 'ID_i', 'nobs_i',
     #    'Separation_1a', 'RA_z', 'Dec_z', 'ID_z', 'nobs_z', 'Separation_2',
     #    'RA_2', 'Dec_2', 'ID_2', 'Separation']
-    id_col = "ID_2" if "ID_2" in new_cols else "ID"
+    id_col_label = "ID_2" if "ID_2" in new_cols else "ID"
 
     if total_matched > 0:
         logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
@@ -453,7 +453,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
             id_col = matches[f"ID_{band}"]
             id_mask = id_col.notna()
             valid_ids = id_col[id_mask].values
-            main_ids = matches[id_col][id_mask].values
+            main_ids = matches[id_col_label][id_mask].values
             stack_df = get_rows_by_ids(db_path, f"lightcuves_{band}",valid_ids)
             stack_df["band"] = band
             stack_df.rename(columns={"ID" : "ID_band"})
