@@ -128,6 +128,7 @@ def match_list_of_files(logger, path_list, band):
                 master_cat['MJD'] = mjd
                 logger.info(str(mjd))
                 to_insert = master_cat.copy().drop(columns=["RA", "Dec"])
+                logger.log(to_insert.head())
                 worker_queue.put((band, to_insert)) # This comes from the global variable
                 master_cat = master_cat[["ID", "RA", "Dec"]]
                 #Save mastercat
@@ -156,13 +157,13 @@ def match_list_of_files(logger, path_list, band):
                 temp_input.unlink()
 
                 missing_id = pd.isna(matched["ID"])
-                missing_new = pd.isna(matched["RA_1"])
                 total_missing = missing_id.sum()
                 prev_start_id = next_start_id
                 next_start_id = prev_start_id + total_missing
                 matched.loc[missing_id, "ID"] = range(prev_start_id, next_start_id)
-                to_append = matched[missing_new].copy()
+                to_append = matched[missing_id].copy()
                 to_append.drop(columns=cols_to_drop, inplace=True)
+                logger.log(to_append.head())
                 worker_queue.put((band, to_append)) # This comes from the global variable
                 # Now update master cat
                 nan_ra = matched["RA_1"].isna()
