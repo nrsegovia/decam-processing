@@ -456,7 +456,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
             stack_df["band"] = band
             stack_df.rename(columns={"ID" : "ID_band"}, inplace=True)
             id_dict = dict(zip(valid_ids.astype(int),main_ids.astype(int)))
-            print(zip(valid_ids.astype(int),main_ids.astype(int)))
+            print(list(zip(valid_ids.astype(int),main_ids.astype(int))))
             stack_df['ID_band'] = stack_df['ID_band'].astype(float).astype(int)
             stack_df["ID"] = stack_df['ID_band'].map(id_dict)
             all_results.append(stack_df)
