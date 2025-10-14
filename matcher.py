@@ -156,10 +156,11 @@ def match_list_of_files(logger, path_list, band):
                 temp_master_old.unlink()
                 temp_input.unlink()
 
-                missing_id = pd.isna(matched["ID"])
+                missing_id = pd.isna(matched["ID"]) # This is true where no ID is found, hence new matches
+                missing_ra = pd.isna(matched["RA_2"]) # True where no match in new cat
                 
                 # Pre-existing matches
-                to_append_pre = matched[~missing_id].copy() # the ~ applies a "not"
+                to_append_pre = matched[(~missing_id) & (~missing_ra)].copy() # the ~ applies a "not"
                 to_append_pre.drop(columns=cols_to_drop, inplace=True)
                 logger.info("Old matches")
                 logger.info(to_append_pre.head())
