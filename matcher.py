@@ -459,6 +459,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
             stack_df.rename(columns={"ID" : "ID_band"}, inplace=True)
             id_dict = dict(zip(valid_ids,main_ids))
             stack_df["ID"] = stack_df['ID_band'].map(id_dict)
+            all_results.append(stack_df)
 
         concat_df = pd.concat(all_results)
         # For simplicity store as single file. Later add option to store individual files
