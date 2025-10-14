@@ -453,7 +453,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
             id_col = matches[f"ID_{band}"]
             id_mask = id_col.notna()
             valid_ids = id_col[id_mask].values
-            main_ids = matches.ID[id_mask].values
+            main_ids = matches[id_col][id_mask].values
             stack_df = get_rows_by_ids(db_path, f"lightcuves_{band}",valid_ids)
             stack_df["band"] = band
             stack_df.rename(columns={"ID" : "ID_band"})
