@@ -28,7 +28,7 @@ def get_rows_by_ids(db_path, table_name, ids):
     conn = sqlite3.connect(db_path)
     placeholders = ','.join('?' * len(ids))
     query = f"SELECT * FROM {table_name} WHERE ID IN ({placeholders})"
-    df = pd.read_sql_query(query, conn, params=ids)
+    df = pd.read_sql_query(query, conn, params=ids, index_col=None)
     conn.close()
     return df
 
