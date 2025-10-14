@@ -161,8 +161,10 @@ def match_list_of_files(logger, path_list, band):
                 # Pre-existing matches
                 to_append_pre = matched[~missing_id].copy() # the ~ applies a "not"
                 to_append_pre.drop(columns=cols_to_drop, inplace=True)
+                logger.info("Old matches")
+                logger.info(to_append_pre.head())
                 to_db = [to_append_pre]
-                
+
                 # If any new matches
                 if sum(missing_id) > 0:
                     total_missing = missing_id.sum()
@@ -173,6 +175,7 @@ def match_list_of_files(logger, path_list, band):
                     to_append.drop(columns=cols_to_drop, inplace=True)
                     to_append["Separation"] = 0.0
                     to_db.append(to_append)
+                    logger.info("New matches")
                     logger.info(to_append.head())
 
                 to_db = pd.concat(to_db)
