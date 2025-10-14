@@ -431,7 +431,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     matches = stilts_crossmatch_external(logger, Path(df_file), master_cat, ra_str, dec_str, match_radius)
     # Delete temp file
     Path(df_file).unlink()
-
+    matches.dropna(subset=["Separation"])
     total_matched = len(matches)
     new_cols = matches.columns.to_list()
     # Default output is ['ID_1', 'Type', 'Subtype', 'RA_1', 'Dec_1', 'I', 'V', 'V_I', 'P_1',
