@@ -23,7 +23,7 @@ def get_rows_by_ids(db_path, table_name, ids):
         DataFrame containing all matching rows from the database.
         Empty DataFrame if no matches found in the database.
     """
-    if not isinstance(ids, (list, tuple)):
+    if not isinstance(ids, (list, tuple, np.ndarray)):
         ids = [ids]
     conn = sqlite3.connect(db_path)
     placeholders = ','.join('?' * len(ids))
