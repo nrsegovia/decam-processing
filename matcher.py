@@ -455,12 +455,8 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
             stack_df = get_rows_by_ids(db_path, f"lightcurves_{band}",valid_ids)
             stack_df["band"] = band
             stack_df.rename(columns={"ID" : "ID_band"}, inplace=True)
-            id_dict = dict(zip(valid_ids,main_ids))
-            print(stack_df.dtypes)
-            test = stack_df['ID_band'].values[0]
-            print(type(test))
-            print(test in valid_ids)
-            print(id_dict[test])
+            id_dict = dict(zip(valid_ids.astype(int),main_ids.astype(int)))
+            stack_df['ID_band'] = stack_df['ID_band'].astype(int)
             stack_df["ID"] = stack_df['ID_band'].map(id_dict)
             all_results.append(stack_df)
 
