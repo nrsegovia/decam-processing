@@ -13,22 +13,44 @@ import duckdb
 
 def get_rows_by_ids(db_path, table_name, ids):
     """
-    Retrieve rows from a SQLite table matching the given IDs.
+    Retrieve rows from a DuckDB table matching the given IDs.
     Assumes ID column is named 'ID'.
-    
-    Returns:
-    --------
+
+    Parameters
+    ----------
+    db_path : str
+        Path to the DuckDB database file.
+    table_name : str
+        Name of the table to query.
+    ids : list, tuple, np.ndarray, or scalar
+        One or more IDs to match.
+
+    Returns
+    -------
     pd.DataFrame
         DataFrame containing all matching rows from the database.
-        Empty DataFrame if no matches found in the database.
+        Empty DataFrame if no matches found.
     """
+    # Ensure ids is iterable
     if not isinstance(ids, (list, tuple, np.ndarray)):
         ids = [ids]
-    conn = sqlite3.connect(db_path)
-    placeholders = ','.join('?' * len(ids))
+
+    # Handle empty list early to avoid SQL syntax error
+    if len(ids) == 0:
+        return pd.DataFrame()
+
+    # Open connection
+    con = duckdb.connect(db_path)
+
+    # Create placeholders: DuckDB supports parameter substitution with '?'
+    placeholders = ','.join(['?'] * len(ids))
     query = f"SELECT * FROM {table_name} WHERE ID IN ({placeholders})"
-    df = pd.read_sql_query(query, conn, params=ids, index_col=None)
-    conn.close()
+
+    # Execute the query with parameters
+    df = con.execute(query, ids).df()
+
+    # Close the connection
+    con.close()
     return df
 
 def writer_process(logger, write_queue, out_dir, ccd, band):
@@ -573,7 +595,6 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     # Check if any input source is located within the data limits
     # Crossmatch external with final master
     # Perform sql search... parallely perhaps? Look for most efficient method.
-    db_path = Path(out_dir, f"{ccd}.db")
     master_cat = Path(out_dir, f"{ccd}.final.catalogue.parquet")
     # Create to_match_cat from df
     with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
@@ -603,6 +624,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
         # Collect matches per band, then combine accordingly
         all_results = []
         for band in "griz":
+            db_path = Path(out_dir, f"{ccd}.{band}.duckdb")
             id_col = matches[f"ID_{band}"]
             id_mask = id_col.notna()
             valid_ids = id_col[id_mask].values
