@@ -11,5 +11,6 @@ dependencies:
   - astropy
   - pyarrow-core
   - libparquet
+  - duckdb
 #  - pip: # Packages to be installed via pip
 #    - 
