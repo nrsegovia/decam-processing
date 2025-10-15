@@ -41,31 +41,92 @@ def writer_process(logger, write_queue, out_dir, ccd, bands):
     db = sqlite3.connect(db_path)
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA synchronous=NORMAL")
+    db.execute("PRAGMA cache_size=-10000000")#10GB, though it could be more
+    db.execute("PRAGMA temp_store=MEMORY")
     
     # Initialize all band tables
     for band in bands:
         initialize_band_table(db, band)
     
+    buffer = {band : [] for band in bands}
+    BATCH_SIZE = 200_000 # Rows to accumulate before writing
     processed_count = 0
+    total_duplicates = 0
     
+    # Track duplicates in a separate log file
+    duplicate_log_path = Path(out_dir, f"{ccd}.duplicates.log")
+
+    def flush_buffer(band):
+        # Write accumulated rows for given band
+        nonlocal total_duplicates
+
+        if not buffer[band]:
+            return 0
+        combined_df = pd.concat(buffer[band], ignore_index=True)
+        # Write to temporary table first
+        temp_table = f'temp_{band}'
+        combined_df.to_sql(temp_table, db, if_exists='replace', index=False)
+        
+        # Identify duplicates before inserting
+        duplicate_check = db.execute(f"""
+            SELECT t.ID, t.MJD, t.M, t.dM, t.flux, t.dflux, t.type, t.Separation
+            FROM {temp_table} t
+            INNER JOIN lightcurves_{band} l 
+            ON t.ID = l.ID AND t.MJD = l.MJD
+        """).fetchall()
+        
+        if duplicate_check:
+            num_duplicates = len(duplicate_check)
+            total_duplicates += num_duplicates
+            
+            # Log duplicates with details
+            with open(duplicate_log_path, 'a') as f:
+                f.write(f"\n{'='*80}\n")
+                f.write(f"Band: {band} | Timestamp: {pd.Timestamp.now()}\n")
+                f.write(f"Found {num_duplicates} duplicate(s)\n")
+                f.write(f"{'='*80}\n")
+                for dup in duplicate_check:
+                    f.write(f"ID={dup[0]}, MJD={dup[1]}, M={dup[2]}, dM={dup[3]}, "
+                           f"flux={dup[4]}, dflux={dup[5]}, type={dup[6]}, Separation={dup[7]}\n")
+            
+            logger.warning(f"Found {num_duplicates} duplicate(s) in {band}-band. "
+                          f"Details logged to {duplicate_log_path}")
+        
+        # Insert only non-duplicates
+        rows_inserted = db.execute(f"""
+            INSERT OR IGNORE INTO lightcurves_{band}
+            SELECT * FROM {temp_table}
+        """).rowcount
+        
+        db.execute(f"DROP TABLE {temp_table}")
+        db.commit()
+        buffer[band] = []
+        return rows_inserted
+
     while True:
         item = write_queue.get()
         
         if item is None:  # shutdown signal
+            for band in bands:
+                rows = flush_buffer(band)
+                if rows > 0:
+                    logger.info(f"Final flush for {band}: {rows} rows")
             break
         
         band, df = item
-        
-        # Write to database
-        df.to_sql(f'lightcurves_{band}', db, if_exists='append',
-                  index=False, method='multi', chunksize=10000)
-        db.commit()
-        
-        processed_count += 1
-        # logger.info(f"Written band {band} to database ({processed_count} batches total)")
+        buffer[band].append(df)
+        current_size = sum(len(d) for d in buffer[band])
+        if current_size >= BATCH_SIZE:
+            rows = flush_buffer(band)
+            processed_count += 1
+            logger.info(f"Flushed {band}: {rows} rows (batch #{processed_count})")
     
     db.close()
-    logger.info(f"Writer process finished. Total batches written: {processed_count}")
+    if total_duplicates > 0:
+        logger.warning(f"Writer process finished. Total duplicates found: {total_duplicates}. "
+                      f"See {duplicate_log_path} for details")
+    else:
+        logger.info(f"Writer process finished. No duplicates found. Total batches written: {processed_count}")
 
 def initialize_band_table(db, band):
     db.execute(f"""
@@ -78,22 +139,26 @@ def initialize_band_table(db, band):
                     dflux REAL NOT NULL,
                     type INTEGER NOT NULL,
                     Separation REAL NOT NULL,
-
-                    PRIMARY KEY (ID, MJD)
                 )
             """)
             
-    # Create indexes for fast queries
-    db.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_source 
-                ON lightcurves_{band}(ID)
-            """)
-            
-    db.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_mjd 
-                ON lightcurves_{band}(MJD)
-            """)
-            
+    db.commit()
+
+def create_indexes(db, bands):
+    # Only after all data has been inserted
+    for band in bands:
+        db.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_source_{band} 
+                    ON lightcurves_{band}(ID)
+                """)
+        db.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_mjd_{band} 
+                    ON lightcurves_{band}(MJD)
+                """)
+        db.execute(f"""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_primary_{band}
+                    ON lightcurves_{band}(ID, MJD)
+                """)
     db.commit()
 
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
@@ -394,6 +459,13 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
         # Stop writer
         write_queue.put(None)
         writer.join()
+        # Create db index
+        logger.info("Creating indexes...")
+        db_path = Path(out_dir, f"{ccd}.db")
+        db = sqlite3.connect(db_path)
+        create_indexes(db, bands)
+        db.close()
+        logger.info("Indexes created successfully")
 
         logger.info("All bands processed and written to database")
 
