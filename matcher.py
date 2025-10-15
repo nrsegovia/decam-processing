@@ -471,6 +471,10 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
             except:
                 pass
 
+def init_worker(qs):
+    """Initialize worker with access to all band queues"""
+    global worker_queues
+    worker_queues = qs
 
 def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
     # Probably must add method to check what ccd, band and field? has been completed
@@ -489,11 +493,6 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
         )
         writers[band].start()
         logger.info(f"Started writer process for {band}-band")
-    
-    def init_worker(qs):
-        """Initialize worker with access to all band queues"""
-        global worker_queues
-        worker_queues = qs
 
     # Process bands in parallel using Pool
     args_list = []
