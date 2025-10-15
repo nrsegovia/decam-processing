@@ -138,7 +138,7 @@ def initialize_band_table(db, band):
                     flux REAL NOT NULL,
                     dflux REAL NOT NULL,
                     type INTEGER NOT NULL,
-                    Separation REAL NOT NULL,
+                    Separation REAL NOT NULL
                 )
             """)
             
