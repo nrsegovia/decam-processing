@@ -317,10 +317,9 @@ def match_list_of_files(logger, path_list, band):
         try:
             temp_master.unlink()
             logger.info(f"Band {band} processing complete")
-            return band, final_df
         except Exception as e:
             logger.error(f"Error for band {band}: {e}")
-            return band, final_df
+    return band, final_df
 
 def stilts_crossmatch_pair(logger,  catalog1_path: Path, catalog2_path: Path) -> pd.DataFrame:
         """Run STILTS crossmatch between two catalogs."""
