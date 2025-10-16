@@ -91,6 +91,7 @@ def writer_process(write_queue, out_dir, ccd, band):
     def flush_buffer():
         """Write accumulated data to database"""
         nonlocal total_duplicates, total_rows_written
+        logger = logging.getLogger()
         
         if not buffer:
             return 0
