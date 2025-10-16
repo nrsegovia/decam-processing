@@ -55,7 +55,7 @@ def get_rows_by_ids(db_path, table_name, ids):
     con.close()
     return df
 
-def writer_process(logger, write_queue, out_dir, ccd, band):
+def writer_process(write_queue, out_dir, ccd, band):
     """
     Single writer process for one band - writes to separate DuckDB file.
     
@@ -66,6 +66,7 @@ def writer_process(logger, write_queue, out_dir, ccd, band):
         ccd: CCD identifier
         band: Band name
     """
+    logger = logging.getLogger()
     db_path = Path(out_dir, f"{ccd}.{band}.duckdb")
     db = duckdb.connect(str(db_path))
     
@@ -132,8 +133,8 @@ def writer_process(logger, write_queue, out_dir, ccd, band):
         rows_before = db.execute(f"SELECT COUNT(*) FROM lightcurves_{band}").fetchone()[0]
         
         db.execute(f"""
-            INSERT INTO lightcurves_{band} 
-            SELECT * FROM combined_df
+            INSERT INTO lightcurves_{band} (ID, MJD, M, dM, flux, dflux, type, Separation)
+            SELECT ID, MJD, M, dM, flux, dflux, type, Separation FROM combined_df
             WHERE NOT EXISTS (
                 SELECT 1 FROM lightcurves_{band} l
                 WHERE l.ID = combined_df.ID AND l.MJD = combined_df.MJD
@@ -522,7 +523,7 @@ def create_db_ccd_band(logger, log_queue, listener, bands, field_paths, ccd, out
         queues[band] = manager.Queue(maxsize=0)
         writers[band] = Process(
             target=writer_process,
-            args=(logger, queues[band], out_dir, ccd, band)
+            args=(queues[band], out_dir, ccd, band)
         )
         writers[band].start()
         logger.info(f"Started writer process for {band}-band")
