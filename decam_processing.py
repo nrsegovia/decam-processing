@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import logging
+import multiprocessing
+from logging.handlers import QueueHandler, QueueListener
 from parquet_utils import *
 from photpipe_utils import *
 from utils import *
@@ -158,7 +159,7 @@ def dcmp_to_parquet_mode(main_dir: Path, ccds, single_ccd, bands, single_band, w
         else:
             logger.info(f"{target_dir} does not exist. Skipping.")
 
-def create_db_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger):
+def create_db_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger, log_queue, listener):
     """Run batch processing on given ccd-band(s) configuration.
     Creates/populates DB and master catalogue per band"""
     out_dir = Path(local, "output", glob_name)
@@ -170,7 +171,7 @@ def create_db_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, work
     for number_ccd in these_ccds:
         current_ccd = str(number_ccd)
         logger.info(f"Working on CCD {current_ccd}.")
-        create_db_ccd_band(logger, bands, main_dir, current_ccd, out_dir)
+        create_db_ccd_band(logger, log_queue, listener, bands, main_dir, current_ccd, out_dir)
 
     logger.info("Batch processing completed!")
 
@@ -338,12 +339,24 @@ def main():
 
     workers = args.workers
 
-    # Initialize logging
-    logging.basicConfig(filename=Path(local, "processing.log"),
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-    logger = logging.getLogger(__name__)
+    # Set up root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # Create file handler
+    file_handler = logging.FileHandler(Path(local, "processing.log"))
+    formatter = logging.Formatter('%(asctime)s [%(processName)s] %(levelname)s: %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # Create log queue
+    log_queue = multiprocessing.Queue()
+
+    # QueueListener writes logs from workers to the file
+    listener = QueueListener(log_queue, file_handler)
+    listener.start()
+
+    # In the main process we can still use logger normally
+    logger.addHandler(file_handler)
 
     if mode == "HDF_TO_PARQUET":
         if path_only:
@@ -359,7 +372,7 @@ def main():
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
-            create_db_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
+            create_db_ccd_band_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger, log_queue, listener)
     elif mode == "MASTER_CATALOG_CCD":
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")

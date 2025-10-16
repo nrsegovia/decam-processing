@@ -10,6 +10,8 @@ from multiprocessing import Pool, Process, Manager
 import json
 from datetime import datetime
 import duckdb
+import logging
+from logging.handlers import QueueHandler
 
 def get_rows_by_ids(db_path, table_name, ids):
     """
@@ -228,7 +230,7 @@ def create_indexes(db_path, band, logger):
 
 # Call topcat/stilts, no multiprocessing customization as I do not know how stilts scales.
 
-def match_list_of_files(logger, path_list, band):
+def match_list_of_files(path_list, band):
     """
     Process and match a list of catalog files for a single band.
     Sends data to band-specific queue as it processes.
@@ -241,6 +243,7 @@ def match_list_of_files(logger, path_list, band):
     Returns:
         tuple: (band, final_master_dataframe)
     """
+    logger = logging.getLogger()
     logger.info(f"Starting worker for band {band}")
     final_df = None
     try:
@@ -492,17 +495,26 @@ def stilts_crossmatch_external(logger,  in_path: Path, master_path: Path, inra, 
             except:
                 pass
 
-def init_worker(qs):
-    """Initialize worker with access to all band queues"""
-    global worker_queues
-    worker_queues = qs
+def init_worker(log_queue, queues):
+    # Clear existing handlers (important to avoid duplicates)
+    logger = logging.getLogger()
+    logger.handlers.clear()
+    logger.setLevel(logging.INFO)
 
-def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
+    # Add a QueueHandler that sends logs to the main process
+    qh = QueueHandler(log_queue)
+    logger.addHandler(qh)
+
+    # Also store other shared objects like your queues
+    global worker_queues
+    worker_queues = queues
+
+def create_db_ccd_band(logger, log_queue, listener, bands, field_paths, ccd, out_dir):
     # Probably must add method to check what ccd, band and field? has been completed
     # Otherwise the database must be deleted every time a new dataset wants to be added...
     Path(out_dir).mkdir(exist_ok=True, parents=True)
-    manager = Manager()
 
+    manager = Manager()
     queues = {}
     writers = {}
 
@@ -524,9 +536,9 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
             all_paths = []
             for this_path in relevant_paths:
                 all_paths += list(this_path.glob("*.parquet"))
-            args_list.append((logger, all_paths, band))
+            args_list.append((all_paths, band))
 
-        with Pool(len(bands), initializer=init_worker, initargs=(queues, )) as pool:
+        with Pool(len(bands), initializer=init_worker, initargs=(log_queue, queues)) as pool:
             # starmap returns list of results in order
             results = pool.starmap(match_list_of_files, args_list)
         

@@ -170,18 +170,19 @@ def check_and_handle_mjd_duplicates(logger, path_list, priority_dirs):
                 
                 # Rename the file
                 try:
-                    # file_path.rename(new_path)
+                    file_path.rename(new_path)
                     renamed_count += 1
+                    # The following was too verbose, uncomment if needed
                     
                     # Log which priority dir it belonged to
-                    file_priority_idx = file_priority[0]
-                    if file_priority_idx < len(priority_dirs):
-                        orig_dir = priority_dirs[file_priority_idx]
-                        logger.info(f"  Renamed: {file_path.name} → {new_name} "
-                                  f"(priority dir: {orig_dir})")
-                    else:
-                        logger.info(f"  Renamed: {file_path.name} → {new_name} "
-                                  f"(not in priority dirs)")
+                    # file_priority_idx = file_priority[0]
+                    # if file_priority_idx < len(priority_dirs):
+                    #     orig_dir = priority_dirs[file_priority_idx]
+                    #     logger.info(f"  Renamed: {file_path.name} → {new_name} "
+                    #               f"(priority dir: {orig_dir})")
+                    # else:
+                    #     logger.info(f"  Renamed: {file_path.name} → {new_name} "
+                    #               f"(not in priority dirs)")
                 except Exception as e:
                     logger.error(f"  Failed to rename {file_path}: {e}")
     
