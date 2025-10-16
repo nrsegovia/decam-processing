@@ -221,6 +221,18 @@ def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius
     else:
         logger.info(f"No input catalogue sources were found in the data.")
 
+def remove_duplicates_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger):
+    logger.info("Started removal of duplicates for all CCDs")
+    for ccd in range(1,62):
+        for band in "griz":
+            relevant_paths = [Path(x, str(ccd), band) for x in main_dir]
+            all_paths = []
+            for this_path in relevant_paths:
+                all_paths += list(this_path.glob("*.parquet"))
+            check_and_handle_mjd_duplicates(logger, all_paths, main_dir)
+        logger.info(f"CCD {ccd} done.")
+    logger.info(f"Duplicates have been removed.")
+
 def main():
     # Create argument parser
     parser = argparse.ArgumentParser(
@@ -358,6 +370,11 @@ def main():
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
             lightcurve_mode(main_dir,input_path, input_ra, input_dec, input_radius, output_dir, glob_name, logger)
+    elif mode == "REMOVE_DUPLICATES":
+        if path_only:
+            logger.error("This mode is only available for global directories, not single ones. Aborting.")
+        else:
+            remove_duplicates_mode(main_dir, ccds, single_ccd, bands, single_band, workers, glob_name, logger)
 
 if __name__ == "__main__":
     main()

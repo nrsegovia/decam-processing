@@ -19,6 +19,8 @@ ALL_FIELDS = {# DECaPS East Field (DDT)
               "B1" : "/data/DECAMNOAO/ShoCd/workspace/b1/", # Note: incomplete processing
               }
 
+# The lists within the dictionary MUST follow chronological order, or at the very least,
+# the ones you would keep in case of duplicate files should be placed earlier 
 GLOBAL_NAME_ONLY = {
               "EAST" : ["/data/DECAMNOAO/ShoCd/workspace/decaps_east_shocd/",
                         "/data/DECAMNOAO/ShoCd/workspace/decaps_east_regular/",
@@ -40,7 +42,8 @@ MODES = {"HDF_TO_PARQUET" : "Convert HDF files in a directory to parquet. Old fi
          "DCMP_TO_PARQUET" : "Convert dcmp files in a directory created by photpipe to parquet. New subdirectories per each requested band are created.",
          "CREATE_CCD_BAND_DB" : "Creates catalog of all sources observed in a given configuration of field(global)-ccd-band(s), and also stores individual observations in a sql database. Uses STILTS, so the number of workers set here is irrelevant.",
          "MASTER_CATALOG_CCD" : "Creates single master catalog for each CCD in the provided range, using all four photometric bands (assumes that the corresponding per-band catalogues have been created).",
-         "LIGHTCURVE" : "Lightcurve extraction mode based on input CSV catalog. Note that the CCD and band-related arguments are ignored in this case."}
+         "LIGHTCURVE" : "Lightcurve extraction mode based on input CSV catalog. Note that the CCD and band-related arguments are ignored in this case.",
+         "REMOVE_DUPLICATES" : "Scan and remove duplicates from the parquet files (based on equal ccd, band and MJD). Removal means renaming by adding _duplicate at the end of the file, to avoid unwanted file deletion."}
 
 MODES_STRING = "\n".join([f"{x} = {MODES[x]}" for x in MODES.keys()])
 

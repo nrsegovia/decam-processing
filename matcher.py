@@ -262,8 +262,8 @@ def match_list_of_files(logger, path_list, band):
                 # Columns here must be checked, but assuming that required cols are available
                 master_cat["Separation"] = 0.0 # Base coord
                 master_cat["ID"] = range(prev_start_id, next_start_id)
-                zpt = get_from_header(path_list[0], "ZPTMAG")
-                mjd = get_from_header(path_list[0], "MJD-OBS")
+                zpt = get_from_header(cat_to_match, "ZPTMAG")
+                mjd = get_from_header(cat_to_match, "MJD-OBS")
                 # Apply ZP and add date column
                 master_cat['M'] += zpt
                 master_cat['MJD'] = mjd
@@ -535,9 +535,6 @@ def create_db_ccd_band(logger, bands, field_paths, ccd, out_dir):
                 master_cat_path = Path(out_dir, f"{ccd}.{band}.master.catalogue.parquet")
                 df.to_parquet(master_cat_path, index=False)
                 logger.info(f"Saved master catalogue for {band}-band: {len(df)} sources")
-
-    except Exception as e:    
-        logger.error(e)
 
     except Exception as e:
         logger.error(f"Error in processing: {e}")
