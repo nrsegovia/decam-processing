@@ -166,7 +166,7 @@ def check_and_handle_mjd_duplicates(logger, path_list, priority_dirs):
                 # Create new name with _duplicate suffix
                 file_path = Path(file_path)
                 stem = file_path.name
-                suffix = "_duplicate"
+                suffix = ".duplicate"
                 new_name = f"{stem}{suffix}"
                 new_path = file_path.parent / new_name
                 
