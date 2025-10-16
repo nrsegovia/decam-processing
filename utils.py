@@ -151,21 +151,23 @@ def check_and_handle_mjd_duplicates(logger, path_list, priority_dirs):
             keep_file, keep_priority = files_with_priority[0]
             files_to_keep.append(keep_file)
             
+            # The following was too verbose, uncomment if needed
+
             # Find which priority directory the kept file belongs to
-            keep_priority_idx = keep_priority[0]
-            if keep_priority_idx < len(priority_dirs):
-                keep_dir = priority_dirs[keep_priority_idx]
-                logger.info(f"  Keeping: {keep_file} (priority dir: {keep_dir})")
-            else:
-                logger.info(f"  Keeping: {keep_file} (not in priority dirs)")
+            # keep_priority_idx = keep_priority[0]
+            # if keep_priority_idx < len(priority_dirs):
+            #     keep_dir = priority_dirs[keep_priority_idx]
+            #     logger.info(f"  Keeping: {keep_file} (priority dir: {keep_dir})")
+            # else:
+            #     logger.info(f"  Keeping: {keep_file} (not in priority dirs)")
             
             # Rename the rest
             for file_path, file_priority in files_with_priority[1:]:
                 # Create new name with _duplicate suffix
                 file_path = Path(file_path)
-                stem = file_path.stem
-                suffix = file_path.suffix
-                new_name = f"{stem}_duplicate{suffix}"
+                stem = file_path.name
+                suffix = "_duplicate"
+                new_name = f"{stem}{suffix}"
                 new_path = file_path.parent / new_name
                 
                 # Rename the file
@@ -173,7 +175,7 @@ def check_and_handle_mjd_duplicates(logger, path_list, priority_dirs):
                     file_path.rename(new_path)
                     renamed_count += 1
                     # The following was too verbose, uncomment if needed
-                    
+
                     # Log which priority dir it belonged to
                     # file_priority_idx = file_priority[0]
                     # if file_priority_idx < len(priority_dirs):
