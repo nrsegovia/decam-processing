@@ -14,44 +14,26 @@ import logging
 from logging.handlers import QueueHandler
 
 def get_rows_by_ids(db_path, table_name, ids):
-    """
-    Retrieve rows from a DuckDB table matching the given IDs.
-    Assumes ID column is named 'ID'.
-
-    Parameters
-    ----------
-    db_path : str
-        Path to the DuckDB database file.
-    table_name : str
-        Name of the table to query.
-    ids : list, tuple, np.ndarray, or scalar
-        One or more IDs to match.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing all matching rows from the database.
-        Empty DataFrame if no matches found.
-    """
-    # Ensure ids is iterable
     if not isinstance(ids, (list, tuple, np.ndarray)):
         ids = [ids]
-
-    # Handle empty list early to avoid SQL syntax error
+    
     if len(ids) == 0:
         return pd.DataFrame()
-
-    # Open connection
+    
     con = duckdb.connect(db_path)
-
-    # Create placeholders: DuckDB supports parameter substitution with '?'
-    placeholders = ','.join(['?'] * len(ids))
-    query = f"SELECT * FROM {table_name} WHERE ID IN ({placeholders})"
-
-    # Execute the query with parameters
-    df = con.execute(query, ids).df()
-
-    # Close the connection
+    
+    # Create a DataFrame from IDs and register it
+    id_df = pd.DataFrame({'ID': ids})
+    con.register('id_list', id_df)
+    
+    # Perform an efficient join
+    query = f"""
+        SELECT t.* 
+        FROM {table_name} t
+        INNER JOIN id_list i ON t.ID = i.ID
+    """
+    df = con.execute(query).df()
+    
     con.close()
     return df
 
