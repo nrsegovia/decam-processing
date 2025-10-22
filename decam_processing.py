@@ -99,8 +99,9 @@ def parse_input(value):
         raise argparse.ArgumentTypeError(f"Invalid input: '{value}'. Expected path to existing file.")
     
 def parse_output(value):
-    if Path(value).is_dir():
-        return value
+    output = Path(value)
+    if output.is_dir():
+        return output
     else:
         raise argparse.ArgumentTypeError(f"Invalid input: '{value}'. Expected path to directory.")
 
