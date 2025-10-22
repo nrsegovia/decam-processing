@@ -188,7 +188,7 @@ def master_catalog_ccd_mode(main_dir, ccds, single_ccd, bands, single_band, work
             logger.info(f"CCD {ccd} done.")
     logger.info(f"Final master catalog for CCD process has finished.")
 
-def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius, save_dir, glob_name, logger):
+def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius, save_dir, glob_name, logger, use_parquet):
     logger.info(f"Started lightcurve extraction for input catalog: {input_catalogue}")
     save_dir.mkdir(parents=True, exist_ok=True)
     out_dir = Path(local, "output", glob_name)
@@ -216,7 +216,7 @@ def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius
     if len(found_ccds) > 0:
         for current_ccd, current_mask in found_ccds:
             df_subset = input_cat[current_mask]
-            extract_light_curves(logger, glob_name, main_dir, current_ccd, out_dir, df_subset, input_ra, input_dec, input_radius, save_dir)
+            extract_light_curves(logger, glob_name, main_dir, current_ccd, out_dir, df_subset, input_ra, input_dec, input_radius, save_dir, use_parquet)
             logger.info(f"CCD {current_ccd} done.")
         logger.info(f"Lightcurve creation process has finished.")
     else:
@@ -318,6 +318,12 @@ def main():
         action='store_true',
         help='Enable verbose output'
     )
+
+    parser.add_argument(
+        '--parquet', 
+        action='store_true',
+        help='Use parquet instead of csv when creating files after matching against external catalogue'
+    )
     
     # Parse the arguments
     args = parser.parse_args()
@@ -336,6 +342,7 @@ def main():
     input_ra = args.ra
     input_dec = args.dec
     input_radius = args.radius
+    use_parquet = args.parquet
 
     workers = args.workers
 
@@ -382,7 +389,7 @@ def main():
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")
         else:
-            lightcurve_mode(main_dir,input_path, input_ra, input_dec, input_radius, output_dir, glob_name, logger)
+            lightcurve_mode(main_dir,input_path, input_ra, input_dec, input_radius, output_dir, glob_name, logger, use_parquet)
     elif mode == "REMOVE_DUPLICATES":
         if path_only:
             logger.error("This mode is only available for global directories, not single ones. Aborting.")

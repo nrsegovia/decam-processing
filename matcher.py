@@ -601,7 +601,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Save catalogue
     matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue.parquet"), index = False)
 
-def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir):
+def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir, use_parquet):
     # Must be reworked to according to the following steps:
     # Check if any input source is located within the data limits
     # Crossmatch external with final master
@@ -629,8 +629,12 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     if total_matched > 0:
         logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
         timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
-        cat_path = Path(save_dir, f"{timestamp_iso8601}_{ccd}.result.csv")
-        matches.to_csv(cat_path, index=False)
+        if use_parquet:
+            cat_path = Path(save_dir, f"{timestamp_iso8601}_{ccd}.result.parquet")
+            matches.to_parquet(cat_path, index=False)
+        else:
+            cat_path = Path(save_dir, f"{timestamp_iso8601}_{ccd}.result.csv")
+            matches.to_csv(cat_path, index=False)
         logger.info(f"Catalogue created at {cat_path}")
         # Collect matches per band, then combine accordingly
         all_results = []
@@ -650,7 +654,10 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
 
         concat_df = pd.concat(all_results)
         # For simplicity store as single file. Later add option to store individual files
-        concat_df.to_csv(Path(save_dir, f"{ccd}.query_results.csv"), index = False)
+        if use_parquet:
+            concat_df.to_parquet(Path(save_dir, f"{ccd}.query_results.parquet"), index = False)
+        else:
+            concat_df.to_csv(Path(save_dir, f"{ccd}.query_results.csv"), index = False)
     else:
         logger.info("No matches found. No curves have been extracted.")
     
