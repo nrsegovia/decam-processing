@@ -629,7 +629,7 @@ def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_
     if total_matched > 0:
         logger.info(f"{total_matched} match(es) found. Creating lightcurves and cross-matched catalogue.")
         timestamp_iso8601 = datetime.now().isoformat().replace(':', '-')
-        cat_path = Path(save_dir, f"{timestamp_iso8601}_result.csv")
+        cat_path = Path(save_dir, f"{timestamp_iso8601}_{ccd}.result.csv")
         matches.to_csv(cat_path, index=False)
         logger.info(f"Catalogue created at {cat_path}")
         # Collect matches per band, then combine accordingly
