@@ -27,5 +27,7 @@ for field in json_data.keys():
              ha='center', va='center',
              fontsize=12, fontweight='bold',
              color='k')
+    plt.xlabel("RA")
+    plt.ylabel("Dec")
     plt.savefig(Path(local, f"{field}_footprint.png"))
 
