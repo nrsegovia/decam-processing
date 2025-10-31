@@ -31,7 +31,7 @@ Or, at the very least, you have installed the python packages listed in `environ
 
 You can run the `visualize_coverage.py` script to take a look at the current data available or, more specifically, the approximate CCD coverage for all the processed fields. An example is given below for the `EAST` field.
 
-![DECaPS East field]()
+![DECaPS East field](EAST_footprint.png)
 
 ## Retrieving data
 
