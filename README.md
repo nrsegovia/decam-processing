@@ -9,6 +9,7 @@ Tools for further processing of DECam data products after photpipe processing. S
 - [Reducing NOIRLab files using `photpipe`](#reducing-noirlab-files-using-photpipe)
 - [BEFORE USING THE SCRIPTS](#before-using-the-scripts)
 - [Adding `photpipe` catalogues to the database](#adding-photpipe-catalogues-to-the-database)
+- [Checking data coverage](#checking-data-coverage)
 - [Retrieving data](#retrieving-data)
 - [Exploring individual catalogues](#exploring-individual-catalogues)
 - [Exploring individual images](#exploring-individual-images)
@@ -25,6 +26,13 @@ conda activate decam
 Or, at the very least, you have installed the python packages listed in `environment.yml`.
 
 ## Adding `photpipe` catalogues to the database
+
+## Checking data coverage
+
+You can run the `visualize_coverage.py` script to take a look at the current data available or, more specifically, the approximate CCD coverage for all the processed fields. An example is given below for the `EAST` field.
+
+![DECaPS East field]()
+
 ## Retrieving data
 
 To fully take advantage of the database, the data (light curve) retrieval works in two steps. The first step matches a user-provided catalog against the master catalogues built in the previous section. The match makes uses of `STILTS` and its `tmatch2` algorithm, under the `find=all` configuration. This means that all matches within the user-provided radius and coordinates are returned. This results in a matched catalogue which you will find in the output directory.
