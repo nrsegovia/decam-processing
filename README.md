@@ -57,18 +57,36 @@ The arguments are briefly explained below, and you can also find some documentat
 - `ra` sets the name of the right ascension column in your input catalogue. The default is RA.
 - `dec` sets the name of the declination column in your input catalogue. The default is Dec.
 
-If your input catalogue is matched against any sources in the database, you will get at least 2 files as a result of the process. The maximum number of files you get would be 62. This is because you get one matched catalogue plus N data files, with N being the number of DECam CCDs with matches.
+If your input catalogue is matched against any sources in the database, you will get at least 2 files as a result of the process. The maximum number of files you get would be 122. This is because you get one matched catalogue plus one data file per CCD with matching data.
 
 ### Using the matched data
 
 Since the results are not _per source_, you still have the task of separating them and checking for overlaps ahead of you. The following lines contain some advice/ideas, but you are free to choose whatever you want to do with the data.
 
-- Look at the distance of the matches.
-- Filter by `dotype`.
-- Look at the data and their individual ID columns.
+- The resulting file contains a `Separation` column. It is directly related to the selected cross-match radius, as no `Separation` value should be over the imposed threshold. Trends in this separation can give you some clues, e.g., lower values mean matches closer to your input coordinates.
+- Filtering by `dotype` is a good idea, as generally you will only be interested in stellar sources. This can be done by using only `type in [1,3]`, though for a complete description you can take a look at the `DoPhot` manual (for en excerpt, take a look at [the end of this documentation]())
+- The way in which the database has been built implies that there are several steps in identifying a given source. The first one is its location within the CCD subsets: a given source may appear in more than a single CCD if it lies near a CCD edge. Hence, you could use the input `ID` column (as recommended before) to look for sources with matches in multiple CCDs.
+- If you are not using an input `ID` column, you can still use the `GroupID` column as a way of grouping matches found for a given input coordinate. Beware that sources with a single match are not considered a group and therefore `GroupID` is empty (`NaN`). Then, for each `GroupID` value (or each empty row), you can extract data from the data results (file in the format `CCD.query_results.csv` or `parquet`) by looking for matching rows using the `ID` column. This can be done by using the fourth to last column in your matched catalogue (before `GroupID`) and the `ID` column of the data. I know that this sounds complicated so I have created an `example.ipynb` file.
 
 ## Exploring individual catalogues
 ## Exploring individual images
+## Additional information
+### DOtype
+The following table has been retrieved from the manual uploaded to the [DoPHOT_C repository](https://github.com/M1TDoPHOT/DoPHOT_C/tree/master).
+
+| DoType | Description |
+| --- | --- |
+|Type 1|A 'perfect' star. Was used in computing weighted mean shape parameters for stars.|
+|Type 2|Object is not as peaked as a star, and has been interpreted to be a 'galaxy'. Shape parameters were calculated specifically for this object.|
+|Type 3|An object found to be not as peaked as a single star was interpreted to be two very close stars. This is one component of such a close pair. Final fit to this component used mean shape parameters for single star.|
+|Type 4|Failed to converge on a 4-parameter fit using mean single star shape. See section 7.9. Photometry is extremely unreliable.|
+|Type 5|Not enough points with adequate S/N could be found around this object while attempting a 7-parameter fit to determine shape. Indicates a problem with the local environment, although a 4-parameter fit with mean star shape succeeded. Photometry is suspect, and this may not be a bona-fide star. See section 7.9.|
+|Type 6|Too few points with adequate S/N to do even a 4-parameter fit with mean star shapes. Object NOT subtracted from image. See section 7.9.|
+|Type 7|Object was too faint to attempt a 7-parameter fit. No object classification could be done, so it might be a faint galaxy or two closely spaced stars. Photometry is OK (from successful 4-parameter fit with mean shapes) provided the object is really a star. See section 7.4 for discussion of star/galaxy discrimination for such objects.|
+|Type 8|These are obliterated regions due to data saturation or identification of cosmic rays. See Section 7.8. The shape descriptors are different for Type 8s than for other types: see Appendix B.|
+|Type 9|If an attempt to determine the shape of an object fails to converge, it is classified as object type 9.  See section 7.9. Photometry is unreliable.|
+
+
 - Convert `photpipe` output to `parquet` files
 - Check for duplicates and remove (rename) as desired by using the mode `mode`
 - Put everything into database by using the `mode` mode
