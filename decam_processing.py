@@ -213,7 +213,7 @@ def lightcurve_mode(main_dir, input_catalogue, input_ra, input_dec, input_radius
             if any(mask):
                 found_ccds.append([stored_ccd, mask])
     else:
-        logger.error("JSON file defining fields not found. Aborting.")
+        logger.error(f"JSON file defining fields not found at {str(json_file)}. Aborting.")
     if len(found_ccds) > 0:
         for current_ccd, current_mask in found_ccds:
             df_subset = input_cat[current_mask]
