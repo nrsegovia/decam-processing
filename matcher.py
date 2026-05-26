@@ -562,9 +562,50 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # of entries, not millions.
     # Assumes that ccd master catalogs have been created, no other option.
     paths_to_master_cats = {x : Path(out_dir, f"{ccd}.{x}.master.catalogue.parquet") for x in "griz"}
-    matched = stilts_crossmatch_N(logger, paths_to_master_cats)
+    # OLD
+    # matched = stilts_crossmatch_N(logger, paths_to_master_cats)
+    # New
+    # Order is important:
+    reference = paths_to_master_cats["r"]
+    prev_band = "r"
+    temp_output = None
+    df = None
+    for band in "giz":
+        df = stilts_crossmatch_pair(logger, reference, paths_to_master_cats[band])
+        df["RA"] = df["RA_1"].combine_first(df["RA_2"])
+        df["Dec"] = df["Dec_1"].combine_first(df["Dec_2"])
+        if prev_band == "r":
+            col_map = {"ID_1" : f"ID_{prev_band}",
+                       "RA_1" : f"RA_{prev_band}",
+                       "Dec_1" : f"Dec_{prev_band}",
+                       "ID_2" : f"ID_{band}",
+                       "RA_2" : f"RA_{band}",
+                       "Dec_2" : f"Dec_{band}",
+                       "Separation" : f"Separation_{prev_band}{band}"}
+            df.rename(columns=col_map, inplace=True)
+            
+        else:
+            col_map = {"ID" : f"ID_{band}",
+                       "RA_2" : f"RA_{band}",
+                       "Dec_2" : f"Dec_{band}",
+                       "Separation" : f"Separation_{prev_band}{band}"}
+            df.drop(columns=["RA_1","Dec_1"],inplace=True)
+            df.rename(columns=col_map, inplace=True)
+
+        prev_band = band
+        if band != "z":
+            # Not last
+            if temp_output:
+                temp_output.unlink()
+            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                temp_output = Path(tmp_file.name)
+            df.to_parquet(temp_output, index=False)
+            reference = temp_output
+    matched = df
+    temp_output.unlink()
+
     # Create and save CCD edges
-    json_file = Path(out_dir, '..', "fields_info.json")
+    json_file = Path(out_dir, '..', "fields_info2.json")
     if json_file.exists():
         with open(json_file, 'r') as f:
             json_data = json.load(f)
@@ -580,8 +621,10 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     with open(json_file, 'w') as f:
         json.dump(json_data, f, indent=3)
 
+    # Create "Global" ID
+    matched['ID'] = range(1, len(matched) + 1)
     # Save catalogue
-    matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue.parquet"), index = False)
+    matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue2.parquet"), index = False)
 
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir, use_parquet):
     # Must be reworked to according to the following steps:
