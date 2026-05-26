@@ -605,7 +605,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     temp_output.unlink()
 
     # Create and save CCD edges
-    json_file = Path(out_dir, '..', "fields_info2.json")
+    json_file = Path(out_dir, '..', "fields_info.json")
     if json_file.exists():
         with open(json_file, 'r') as f:
             json_data = json.load(f)
@@ -624,7 +624,7 @@ def create_ccd_master_catalog(logger, glob_name, field_paths, ccd, out_dir):
     # Create "Global" ID
     matched['ID'] = range(1, len(matched) + 1)
     # Save catalogue
-    matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue2.parquet"), index = False)
+    matched.to_parquet(Path(out_dir, f"{ccd}.final.catalogue.parquet"), index = False)
 
 def extract_light_curves(logger, glob_name, field_paths, ccd, out_dir, to_match_cat, ra_str, dec_str, match_radius, save_dir, use_parquet):
     # Must be reworked to according to the following steps:
